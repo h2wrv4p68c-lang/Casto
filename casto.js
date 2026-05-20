@@ -73,6 +73,7 @@ function parseArgs(argv) {
     noSubs: false,
     subFormat: 'both',
     browse: null,
+    first: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -82,6 +83,7 @@ function parseArgs(argv) {
     else if (a === '--no-subs' || a === '--no-subtitles') out.noSubs = true;
     else if (a === '--sub-format') out.subFormat = (argv[++i] || 'both').toLowerCase();
     else if (a === '--browse') out.browse = argv[++i] || '.';
+    else if (a === '--first') out.first = true;
     else if (a === '-h' || a === '--help') out.help = true;
     else if (!a.startsWith('-') && !out.file) out.file = a;
   }
@@ -479,7 +481,8 @@ async function main() {
         '  --sub <file>      use this subtitle file (overrides auto-detect)\n' +
         '  --no-subs         disable subtitles even if a sidecar exists\n' +
         '  --sub-format <f>  srt | smi | both (default both; SMI auto-built from SRT)\n' +
-        '  --browse <dir>    pick a video from <dir> interactively\n\n' +
+        '  --browse <dir>    pick a video from <dir> interactively\n' +
+        '  --first           auto-pick the first device (no prompt; for scripts/GUI)\n\n' +
         'Controls while playing:  [space] play/pause   s stop   q quit'
     );
     process.exit(args.help ? 0 : 1);
@@ -532,7 +535,7 @@ async function main() {
   }
 
   let target = renderers[0];
-  if (renderers.length > 1) {
+  if (renderers.length > 1 && !args.first) {
     console.log('\nFound multiple devices:');
     renderers.forEach((r, i) => console.log(`  [${i + 1}] ${r.name}`));
     const pick = await ask('Choose device number: ');

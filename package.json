@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node casto.js",
-    "serve": "node server.js"
+    "serve": "node server.js",
+    "menubar": "swift menubar.swift"
   },
   "license": "MIT"
 }
