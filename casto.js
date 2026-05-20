@@ -11,6 +11,7 @@
 //   --host <lan-ip>   force the LAN IP advertised to the TV
 //   --sub <file>      use this subtitle file (overrides auto-detect)
 //   --no-subs         disable subtitles even if a sidecar file exists
+//   --sub-format <f>  srt | smi | both (default both; auto-builds SMI from SRT)
 //   --browse <dir>    pick a video from <dir> interactively
 //
 // Controls once playing:  [space] play/pause   s stop   q quit
@@ -70,6 +71,7 @@ function parseArgs(argv) {
     host: null,
     sub: null,
     noSubs: false,
+    subFormat: 'both',
     browse: null,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -78,6 +80,7 @@ function parseArgs(argv) {
     else if (a === '--host') out.host = argv[++i];
     else if (a === '--sub') out.sub = argv[++i];
     else if (a === '--no-subs' || a === '--no-subtitles') out.noSubs = true;
+    else if (a === '--sub-format') out.subFormat = (argv[++i] || 'both').toLowerCase();
     else if (a === '--browse') out.browse = argv[++i] || '.';
     else if (a === '-h' || a === '--help') out.help = true;
     else if (!a.startsWith('-') && !out.file) out.file = a;
@@ -265,15 +268,16 @@ function soap(controlURL, action, bodyInner) {
   });
 }
 
-function didlMetadata(title, url, contentType, sub) {
+function didlMetadata(title, url, contentType, subs) {
   const protocolInfo = `http-get:*:${contentType}:${DLNA_FEATURES}`;
 
-  // Subtitle resources. LG/Samsung sets pick up the <sec:CaptionInfo*>
-  // elements; the extra <res> with the subtitle protocolInfo is the
-  // generic DLNA hint. `sub` is { url, type } where type is e.g. "srt".
+  // Subtitle resources. We can advertise more than one format; LG/Samsung
+  // sets read the <sec:CaptionInfo*> elements and render whichever they
+  // support, which is as close to an automatic fallback as DLNA allows.
+  // Each `sub` is { url, contentType, type } where type is e.g. "srt"/"smi".
   let subRes = '';
-  if (sub) {
-    subRes =
+  for (const sub of subs || []) {
+    subRes +=
       `<res protocolInfo="http-get:*:${sub.contentType}:*">` +
       `${xmlEscape(sub.url)}</res>` +
       `<sec:CaptionInfoEx sec:type="${sub.type}">${xmlEscape(sub.url)}</sec:CaptionInfoEx>` +
@@ -294,8 +298,8 @@ function didlMetadata(title, url, contentType, sub) {
   return inner;
 }
 
-async function cast(controlURL, url, title, contentType, sub) {
-  const metadata = didlMetadata(title, url, contentType, sub);
+async function cast(controlURL, url, title, contentType, subs) {
+  const metadata = didlMetadata(title, url, contentType, subs);
   await soap(
     controlURL,
     'SetAVTransportURI',
@@ -372,6 +376,52 @@ function startServer(resources, host) {
   });
 }
 
+// Parse SRT timestamp "HH:MM:SS,mmm" (or with '.') into milliseconds.
+function srtTimeToMs(t) {
+  const m = /(\d+):(\d+):(\d+)[,.](\d+)/.exec(t);
+  if (!m) return 0;
+  return (
+    parseInt(m[1], 10) * 3600000 +
+    parseInt(m[2], 10) * 60000 +
+    parseInt(m[3], 10) * 1000 +
+    parseInt(m[4], 10)
+  );
+}
+
+// Convert SubRip (.srt) text to SAMI (.smi). Some LG firmwares render SMI
+// when they ignore SRT, so this gives us a second format to advertise.
+function srtToSami(srtText, title) {
+  const blocks = srtText.replace(/\r/g, '').trim().split(/\n\s*\n/);
+  let body = '';
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const timeIdx = lines.findIndex((l) => /-->/.test(l));
+    if (timeIdx === -1) continue;
+    const [startRaw, endRaw] = lines[timeIdx].split('-->');
+    const start = srtTimeToMs(startRaw);
+    const end = srtTimeToMs(endRaw);
+    // Strip inline SRT/ASS markup, escape each line, then join with real <br>.
+    const text = lines
+      .slice(timeIdx + 1)
+      .map((l) => xmlEscape(l.replace(/<[^>]+>/g, '').replace(/\{[^}]*\}/g, '')))
+      .join('<br>')
+      .trim();
+    if (!text) continue;
+    body += `<SYNC Start=${start}><P Class=ENUSCC>${text}\n`;
+    body += `<SYNC Start=${end}><P Class=ENUSCC>&nbsp;\n`;
+  }
+  return (
+    '<SAMI>\n<HEAD>\n' +
+    `<TITLE>${xmlEscape(title)}</TITLE>\n` +
+    '<STYLE TYPE="text/css">\n<!--\n' +
+    'P { font-family: Arial; text-align: center; color: white; }\n' +
+    '.ENUSCC { Name: English; lang: en-US; SAMIType: CC; }\n' +
+    '-->\n</STYLE>\n</HEAD>\n<BODY>\n' +
+    body +
+    '</BODY>\n</SAMI>\n'
+  );
+}
+
 // Look for a sidecar subtitle next to the video (same basename), preferring
 // SRT. Returns an absolute path or null.
 function findSidecarSubtitle(videoFile) {
@@ -428,6 +478,7 @@ async function main() {
         '  --host <lan-ip>   force the LAN IP advertised to the TV\n' +
         '  --sub <file>      use this subtitle file (overrides auto-detect)\n' +
         '  --no-subs         disable subtitles even if a sidecar exists\n' +
+        '  --sub-format <f>  srt | smi | both (default both; SMI auto-built from SRT)\n' +
         '  --browse <dir>    pick a video from <dir> interactively\n\n' +
         'Controls while playing:  [space] play/pause   s stop   q quit'
     );
@@ -494,38 +545,65 @@ async function main() {
   const videoPath = '/' + encodeURIComponent(path.basename(file));
   const resources = { [decodeURIComponent(videoPath)]: { file, contentType } };
 
-  let sub = null;
+  // Decide which subtitle formats to advertise. For an SRT source we can also
+  // synthesize an SMI so the TV has a fallback to pick from; --sub-format
+  // controls whether we offer srt, smi, or both.
+  let tmpSmi = null;
+  const subEntries = []; // { file, type, contentType }
   if (subFile) {
     const subExt = path.extname(subFile).toLowerCase();
-    const subContentType = SUBTITLE_TYPES[subExt] || 'text/plain';
-    const subPath = '/' + encodeURIComponent(path.basename(subFile));
-    resources[decodeURIComponent(subPath)] = {
-      file: subFile,
-      contentType: subContentType,
-    };
-    sub = {
-      path: subPath,
-      contentType: subContentType,
-      type: subExt.replace('.', ''),
-    };
+    const fmt = args.subFormat;
+    if (subExt === '.srt') {
+      if (fmt === 'srt' || fmt === 'both') {
+        subEntries.push({ file: subFile, type: 'srt', contentType: SUBTITLE_TYPES['.srt'] });
+      }
+      if (fmt === 'smi' || fmt === 'both') {
+        tmpSmi = path.join(os.tmpdir(), `casto-${Date.now()}-${title}.smi`);
+        fs.writeFileSync(tmpSmi, srtToSami(fs.readFileSync(subFile, 'utf8'), title));
+        subEntries.push({ file: tmpSmi, type: 'smi', contentType: SUBTITLE_TYPES['.smi'] });
+      }
+    } else {
+      // Only SRT can be auto-converted; anything else is served as-is.
+      subEntries.push({
+        file: subFile,
+        type: subExt.slice(1),
+        contentType: SUBTITLE_TYPES[subExt] || 'text/plain',
+      });
+      if (fmt === 'smi' && subExt !== '.smi') {
+        console.log('  (note: SMI auto-build only supports SRT input; serving original)');
+      }
+    }
+  }
+
+  const subs = [];
+  for (const e of subEntries) {
+    const niceName = `${title}.${e.type}`; // e.g. Movie.srt / Movie.smi
+    const subPath = '/' + encodeURIComponent(niceName);
+    resources[decodeURIComponent(subPath)] = { file: e.file, contentType: e.contentType };
+    subs.push({ path: subPath, type: e.type, contentType: e.contentType });
   }
 
   const { server, port } = await startServer(resources, host);
   const base = `http://${host}:${port}`;
   const url = base + videoPath;
-  if (sub) {
-    sub.url = base + sub.path;
-    resources[decodeURIComponent(videoPath)].captionUrl = sub.url;
+  for (const s of subs) s.url = base + s.path;
+  if (subs.length) {
+    // Header can only name one; point at the first advertised track.
+    resources[decodeURIComponent(videoPath)].captionUrl = subs[0].url;
   }
 
   console.log(`▶ Casting "${title}" → ${target.name}`);
   console.log(`  serving ${url}`);
-  console.log(`  subtitles: ${sub ? path.basename(subFile) : 'off'}`);
+  console.log(
+    `  subtitles: ${subs.length ? subs.map((s) => s.type).join(' + ') : 'off'}` +
+      (tmpSmi ? ' (SMI auto-built from SRT)' : '')
+  );
 
   try {
-    await cast(target.controlURL, url, title, contentType, sub);
+    await cast(target.controlURL, url, title, contentType, subs);
   } catch (e) {
     server.close();
+    if (tmpSmi) fs.unlinkSync(tmpSmi);
     die('Failed to start playback: ' + e.message);
   }
 
@@ -537,6 +615,11 @@ async function main() {
       if (stopTv) await transport.stop(target.controlURL);
     } catch (_) {}
     server.close();
+    if (tmpSmi) {
+      try {
+        fs.unlinkSync(tmpSmi);
+      } catch (_) {}
+    }
     process.exit(0);
   };
 
