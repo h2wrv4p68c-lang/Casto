@@ -229,6 +229,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func findNode() -> String {
     let fm = FileManager.default
+    // Prefer a node bundled inside the .app so nothing need be preinstalled.
+    if let res = Bundle.main.resourceURL {
+      let bundled = res.appendingPathComponent("node").path
+      if fm.isExecutableFile(atPath: bundled) { return bundled }
+    }
     for c in ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"]
     where fm.isExecutableFile(atPath: c) { return c }
     return "/usr/bin/env"
