@@ -24,7 +24,7 @@ NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 echo "› Compiling menubar.swift (arm64)…"
 rm -rf "$APP" Casto.zip
 mkdir -p "$APP/Contents/MacOS" "$RES"
-swiftc -O -target arm64-apple-macos11 menubar.swift -o "$APP/Contents/MacOS/Casto"
+swiftc -O -target arm64-apple-macos13 menubar.swift -o "$APP/Contents/MacOS/Casto"
 
 echo "› Assembling bundle…"
 cp Info.plist "$APP/Contents/Info.plist"

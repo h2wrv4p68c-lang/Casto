@@ -10,6 +10,7 @@
 // Quitting it stops anything it started.
 
 import Cocoa
+import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var statusItem: NSStatusItem!
@@ -29,6 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     statusItem.button?.image = brandIcon()
     rebuildMenu()
+    // She'll never hunt for the toggle, so offer it once on first launch.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+      self?.maybeOfferLoginItem()
+    }
   }
 
   func applicationWillTerminate(_ note: Notification) {
@@ -77,9 +82,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(serve)
 
     menu.addItem(.separator())
+
+    let login = NSMenuItem(title: "Open at Login",
+                           action: #selector(toggleLoginItemAction), keyEquivalent: "")
+    login.target = self
+    login.state = loginItemEnabled() ? .on : .off
+    menu.addItem(login)
+
     menu.addItem(NSMenuItem(title: "Quit Casto",
                             action: #selector(NSApp.terminate(_:)), keyEquivalent: "q"))
     statusItem.menu = menu
+  }
+
+  // MARK: - Launch at login
+
+  private func loginItemEnabled() -> Bool {
+    if #available(macOS 13.0, *) { return SMAppService.mainApp.status == .enabled }
+    return false
+  }
+
+  @objc private func toggleLoginItemAction() {
+    setLoginItem(!loginItemEnabled()); rebuildMenu()
+  }
+
+  private func setLoginItem(_ on: Bool) {
+    guard #available(macOS 13.0, *) else { return }
+    do {
+      if on {
+        if SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() }
+      } else {
+        try SMAppService.mainApp.unregister()
+      }
+    } catch {
+      alert("Couldn't update Login Item", error.localizedDescription)
+    }
+  }
+
+  // Ask once (ever) whether to launch at login.
+  private func maybeOfferLoginItem() {
+    let key = "castoAskedLoginItem"
+    let defaults = UserDefaults.standard
+    guard !defaults.bool(forKey: key) else { return }
+    defaults.set(true, forKey: key)
+    guard #available(macOS 13.0, *), SMAppService.mainApp.status != .enabled else { return }
+
+    let a = NSAlert()
+    a.messageText = "Open Casto automatically?"
+    a.informativeText = "Casto can start in your menu bar each time you log in, so it's always ready to cast."
+    a.addButton(withTitle: "Open at Login")
+    a.addButton(withTitle: "Not Now")
+    NSApp.activate(ignoringOtherApps: true)
+    if a.runModal() == .alertFirstButtonReturn { setLoginItem(true) }
   }
 
   // MARK: - Custom views
