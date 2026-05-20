@@ -1,0 +1,12 @@
+{
+  "name": "casto",
+  "version": "0.1.0",
+  "description": "Lightweight DLNA caster — stream local video files to a DLNA TV",
+  "bin": {
+    "casto": "casto.js"
+  },
+  "scripts": {
+    "start": "node casto.js"
+  },
+  "license": "MIT"
+}
