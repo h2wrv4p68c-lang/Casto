@@ -1,14 +1,13 @@
 // Casto — menu-bar companion for the DLNA caster + media server.
 //
 // A lightweight native macOS menu-bar app (no Electron) that drives the
-// sibling casto.js (cast a single file) and server.js (serve a library).
+// sibling casto.js (cast a single file) and server.js (serve a library),
+// with a mini poster and transport controls while casting.
 //
-// Run it (from the repo folder, needs Xcode command line tools + Node):
+// Run from source:   swift menubar.swift
+// Or build a .app:    ./build-app.sh   (produces Casto.app)
 //
-//   swift menubar.swift
-//
-// It sits in the menu bar as a wood "C". Quitting it stops anything it
-// started. Packaging into a proper .app bundle is a later step.
+// Quitting it stops anything it started.
 
 import Cocoa
 
@@ -20,9 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var serverDir: String?
   private var castProcess: Process?
   private var castName: String?
+  private var castStdin: FileHandle?     // write newline commands to casto.js
+  private var castPoster: NSImage?
+  private var isPaused = false
 
-  // casto.js / server.js live next to this source file.
-  private let scriptDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+  private lazy var scriptDir: URL = resolveScriptDir()
 
   func applicationDidFinishLaunching(_ note: Notification) {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -31,24 +32,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ note: Notification) {
-    stopServer()
-    stopCast()
+    stopServer(); stopCast()
   }
 
   // MARK: - Menu
 
   private func rebuildMenu() {
     let menu = NSMenu()
-
     let serving = serverProcess != nil
     let casting = castProcess != nil
 
     let status = NSMenuItem(
-      title: serving ? "Serving: \(serverDir.map(prettyPath) ?? "library")"
+      title: serving ? "Serving: \(serverDir.map(pretty) ?? "library")"
                      : (casting ? "Casting: \(castName ?? "file")" : "Casto — idle"),
       action: nil, keyEquivalent: "")
     status.isEnabled = false
     menu.addItem(status)
+
+    if casting {
+      if let poster = castPoster {
+        let item = NSMenuItem()
+        item.view = posterView(poster)
+        menu.addItem(item)
+      }
+      let controls = NSMenuItem()
+      controls.view = transportRow()
+      menu.addItem(controls)
+    }
+
     menu.addItem(.separator())
 
     let cast = NSMenuItem(
@@ -66,31 +77,87 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(serve)
 
     menu.addItem(.separator())
-    let quit = NSMenuItem(title: "Quit Casto", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
-    menu.addItem(quit)
-
+    menu.addItem(NSMenuItem(title: "Quit Casto",
+                            action: #selector(NSApp.terminate(_:)), keyEquivalent: "q"))
     statusItem.menu = menu
   }
 
-  // MARK: - Actions
+  // MARK: - Custom views
+
+  private func posterView(_ image: NSImage) -> NSView {
+    let w: CGFloat = 220, h: CGFloat = 132
+    let container = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
+    let iv = NSImageView(frame: NSRect(x: 10, y: 6, width: w - 20, height: h - 12))
+    iv.image = image
+    iv.imageScaling = .scaleProportionallyUpOrDown
+    iv.wantsLayer = true
+    iv.layer?.cornerRadius = 6
+    iv.layer?.masksToBounds = true
+    container.addSubview(iv)
+    return container
+  }
+
+  private func transportRow() -> NSView {
+    let w: CGFloat = 220, h: CGFloat = 42, bw: CGFloat = 44, bh: CGFloat = 30
+    let container = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
+    let specs: [(String, Selector)] = [
+      ("gobackward.30", #selector(backAction)),
+      (isPaused ? "play.fill" : "pause.fill", #selector(toggleAction)),
+      ("goforward.30", #selector(forwardAction)),
+      ("stop.fill", #selector(transportStopAction)),
+    ]
+    for (i, spec) in specs.enumerated() {
+      let b = NSButton(frame: NSRect(x: 6 + CGFloat(i) * 52, y: (h - bh) / 2, width: bw, height: bh))
+      b.isBordered = false
+      b.bezelStyle = .regularSquare
+      b.imagePosition = .imageOnly
+      b.image = NSImage(systemSymbolName: spec.0, accessibilityDescription: nil)
+      b.imageScaling = .scaleProportionallyDown
+      b.target = self
+      b.action = spec.1
+      container.addSubview(b)
+    }
+    return container
+  }
+
+  // MARK: - Transport actions (write commands to casto.js stdin)
+
+  @objc private func backAction() { send("back") }
+  @objc private func forwardAction() { send("forward") }
+  @objc private func transportStopAction() { send("stop") }
+  @objc private func toggleAction() {
+    send("toggle"); isPaused.toggle(); rebuildMenu()
+  }
+
+  private func send(_ cmd: String) {
+    guard let h = castStdin, let d = (cmd + "\n").data(using: .utf8) else { return }
+    h.write(d)
+  }
+
+  // MARK: - Start/stop
 
   @objc private func castFileAction() {
     guard let url = pickPath(directories: false, prompt: "Cast") else { return }
     stopCast()
+    let pipe = Pipe()
     let p = makeNodeProcess(script: "casto.js", args: [url.path, "--first"])
+    p.standardInput = pipe
     p.terminationHandler = { [weak self] _ in
       DispatchQueue.main.async {
-        self?.castProcess = nil
-        self?.castName = nil
+        self?.castProcess = nil; self?.castStdin = nil
+        self?.castName = nil; self?.castPoster = nil; self?.isPaused = false
         self?.rebuildMenu()
       }
     }
     do {
       try p.run()
       castProcess = p
+      castStdin = pipe.fileHandleForWriting
       castName = url.lastPathComponent
+      castPoster = posterImage(forVideo: url)
+      isPaused = false
     } catch {
-      notify("Couldn't start cast", error.localizedDescription)
+      alert("Couldn't start cast", error.localizedDescription)
     }
     rebuildMenu()
   }
@@ -101,17 +168,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let p = makeNodeProcess(script: "server.js", args: [url.path, "--name", "Casto"])
     p.terminationHandler = { [weak self] _ in
       DispatchQueue.main.async {
-        self?.serverProcess = nil
-        self?.serverDir = nil
-        self?.rebuildMenu()
+        self?.serverProcess = nil; self?.serverDir = nil; self?.rebuildMenu()
       }
     }
     do {
-      try p.run()
-      serverProcess = p
-      serverDir = url.path
+      try p.run(); serverProcess = p; serverDir = url.path
     } catch {
-      notify("Couldn't start server", error.localizedDescription)
+      alert("Couldn't start server", error.localizedDescription)
     }
     rebuildMenu()
   }
@@ -122,37 +185,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func stopCast() {
     castProcess?.terminationHandler = nil
     castProcess?.terminate()
-    castProcess = nil
-    castName = nil
+    castProcess = nil; castStdin = nil
+    castName = nil; castPoster = nil; isPaused = false
   }
 
   private func stopServer() {
     serverProcess?.terminationHandler = nil
     serverProcess?.terminate()
-    serverProcess = nil
-    serverDir = nil
+    serverProcess = nil; serverDir = nil
   }
 
   // MARK: - Helpers
 
+  private func posterImage(forVideo url: URL) -> NSImage? {
+    let dir = url.deletingLastPathComponent()
+    let base = url.deletingPathExtension().lastPathComponent
+    let fm = FileManager.default
+    for ext in ["jpg", "jpeg", "png", "webp"] {
+      let p = dir.appendingPathComponent(base + "." + ext)
+      if fm.fileExists(atPath: p.path) { return NSImage(contentsOf: p) }
+    }
+    for name in ["poster", "folder", "cover"] {
+      for ext in ["jpg", "jpeg", "png"] {
+        let p = dir.appendingPathComponent(name + "." + ext)
+        if fm.fileExists(atPath: p.path) { return NSImage(contentsOf: p) }
+      }
+    }
+    return nil
+  }
+
   private func makeNodeProcess(script: String, args: [String]) -> Process {
     let p = Process()
-    p.executableURL = URL(fileURLWithPath: findNode())
-    p.arguments = [scriptDir.appendingPathComponent(script).path] + args
+    let node = findNode()
+    p.executableURL = URL(fileURLWithPath: node)
+    let scriptPath = scriptDir.appendingPathComponent(script).path
+    p.arguments = (node.hasSuffix("/env") ? ["node", scriptPath] : [scriptPath]) + args
     p.currentDirectoryURL = scriptDir
-    // GUI apps inherit a sparse PATH; widen it so child node finds tools.
     var env = ProcessInfo.processInfo.environment
-    let extra = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-    env["PATH"] = extra + ":" + (env["PATH"] ?? "")
+    env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? "")
     p.environment = env
     return p
   }
 
-  // Look for node in the usual install locations, falling back to PATH.
   private func findNode() -> String {
-    let candidates = ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"]
-    for c in candidates where FileManager.default.isExecutableFile(atPath: c) { return c }
-    return "/usr/bin/env" // last resort; arguments[0] would need to be "node"
+    let fm = FileManager.default
+    for c in ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"]
+    where fm.isExecutableFile(atPath: c) { return c }
+    return "/usr/bin/env"
+  }
+
+  // Scripts live in the .app's Resources, or next to this source file.
+  private func resolveScriptDir() -> URL {
+    let fm = FileManager.default
+    var candidates: [URL] = []
+    if let res = Bundle.main.resourceURL { candidates.append(res) }
+    candidates.append(URL(fileURLWithPath: #filePath).deletingLastPathComponent())
+    candidates.append(URL(fileURLWithPath: fm.currentDirectoryPath))
+    for c in candidates
+    where fm.fileExists(atPath: c.appendingPathComponent("casto.js").path) { return c }
+    return candidates.first ?? URL(fileURLWithPath: ".")
   }
 
   private func pickPath(directories: Bool, prompt: String) -> URL? {
@@ -165,33 +256,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return panel.runModal() == .OK ? panel.url : nil
   }
 
-  private func prettyPath(_ path: String) -> String {
-    URL(fileURLWithPath: path).lastPathComponent
+  private func pretty(_ path: String) -> String { URL(fileURLWithPath: path).lastPathComponent }
+
+  private func alert(_ title: String, _ body: String) {
+    let a = NSAlert(); a.messageText = title; a.informativeText = body; a.runModal()
   }
 
-  private func notify(_ title: String, _ body: String) {
-    let a = NSAlert()
-    a.messageText = title
-    a.informativeText = body
-    a.runModal()
-  }
-
-  // A menu-bar template image of the brand "C".
   private func brandIcon() -> NSImage {
     let size = NSSize(width: 18, height: 18)
     let img = NSImage(size: size)
     img.lockFocus()
     let font = NSFont(name: "Cormorant Garamond", size: 17)
       ?? NSFont(name: "Times New Roman", size: 16)
-      ?? NSFont.systemFont(ofSize: 16, weight: .regular)
+      ?? NSFont.systemFont(ofSize: 16)
     let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
     let s = "C" as NSString
-    let bounds = s.size(withAttributes: attrs)
-    s.draw(at: NSPoint(x: (size.width - bounds.width) / 2,
-                       y: (size.height - bounds.height) / 2),
+    let b = s.size(withAttributes: attrs)
+    s.draw(at: NSPoint(x: (size.width - b.width) / 2, y: (size.height - b.height) / 2),
            withAttributes: attrs)
     img.unlockFocus()
-    img.isTemplate = true // tint to match the menu bar (light/dark)
+    img.isTemplate = true
     return img
   }
 }
@@ -199,5 +283,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-app.setActivationPolicy(.accessory) // menu-bar only, no Dock icon
+app.setActivationPolicy(.accessory)
 app.run()

@@ -322,6 +322,30 @@ const transport = {
   stop: (c) => soap(c, 'Stop', '<InstanceID>0</InstanceID>'),
 };
 
+function hmsToSec(t) {
+  const m = /(\d+):(\d+):(\d+)/.exec(t || '');
+  return m ? +m[1] * 3600 + +m[2] * 60 + +m[3] : 0;
+}
+function secToHms(s) {
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+
+// Skip relative to the current position (delta seconds, +/-).
+async function seekRelative(controlURL, delta) {
+  const info = await soap(controlURL, 'GetPositionInfo', '<InstanceID>0</InstanceID>');
+  const cur = hmsToSec((/<RelTime>([^<]*)<\/RelTime>/i.exec(info) || [])[1]);
+  const target = secToHms(cur + delta);
+  await soap(
+    controlURL,
+    'Seek',
+    `<InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>${target}</Target>`
+  );
+}
+
 // --- Local media server ----------------------------------------------------
 
 // `resources` is a map of urlPath -> { file, contentType, captionUrl }.
@@ -647,6 +671,25 @@ async function main() {
           console.log('  bye');
           await shutdown(true);
         }
+      } catch (e) {
+        console.error('  ✗ ' + e.message);
+      }
+    });
+  } else {
+    // Non-interactive (GUI/pipe): accept newline commands on stdin.
+    const rl = readline.createInterface({ input: process.stdin });
+    rl.on('line', async (line) => {
+      const cmd = line.trim().toLowerCase();
+      try {
+        if (cmd === 'play') await transport.play(target.controlURL), (paused = false);
+        else if (cmd === 'pause') await transport.pause(target.controlURL), (paused = true);
+        else if (cmd === 'toggle') {
+          await (paused ? transport.play : transport.pause)(target.controlURL);
+          paused = !paused;
+        } else if (cmd === 'forward') await seekRelative(target.controlURL, 30);
+        else if (cmd === 'back') await seekRelative(target.controlURL, -30);
+        else if (cmd === 'stop') await transport.stop(target.controlURL);
+        else if (cmd === 'quit') await shutdown(true);
       } catch (e) {
         console.error('  ✗ ' + e.message);
       }
