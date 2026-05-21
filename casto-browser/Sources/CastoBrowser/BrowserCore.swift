@@ -8,13 +8,23 @@ final class BrowserCore {
   weak var window: BrowserWindow?
   private let cast = CastBridge()
 
+  // The local Casto Library web app (library.js). Override with CASTO_LIBRARY.
+  private var libraryURL: URL {
+    URL(string: ProcessInfo.processInfo.environment["CASTO_LIBRARY"] ?? "http://localhost:8010")!
+  }
+
   func open(_ url: URL, newWindow: Bool = false) {
     onMain {
-      // newWindow is a documented v0 stub: single window for now.
-      self.window?.webView.load(URLRequest(url: url))
+      if newWindow {
+        self.window?.newTab(url)
+      } else {
+        self.window?.activeWebView?.load(URLRequest(url: url))
+      }
       self.window?.setAddress(url.absoluteString)
     }
   }
+
+  func openLibrary() { open(libraryURL, newWindow: true) }
 
   func search(_ q: String) {
     var c = URLComponents(string: "https://duckduckgo.com/")!
@@ -24,7 +34,7 @@ final class BrowserCore {
 
   func navigate(_ action: String) {
     onMain {
-      guard let wv = self.window?.webView else { return }
+      guard let wv = self.window?.activeWebView else { return }
       switch action {
       case "back": wv.goBack()
       case "forward": wv.goForward()
@@ -34,13 +44,13 @@ final class BrowserCore {
     }
   }
 
-  func currentURL() -> URL? { window?.webView.url }
+  func currentURL() -> URL? { window?.activeWebView?.url }
 
   // The Casto hook: find a playable media source on the current page and hand
   // it to the casto.js DLNA caster. Falls back to the page URL itself.
   func castCurrent(target: String?) {
     onMain {
-      guard let wv = self.window?.webView else { return }
+      guard let wv = self.window?.activeWebView else { return }
       let js = """
       (function(){var v=document.querySelector('video source[src],video[src]');\
       return v?(v.src||v.getAttribute('src')):'';})()

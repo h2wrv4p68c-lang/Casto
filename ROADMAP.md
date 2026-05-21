@@ -42,8 +42,9 @@ Lightweight, API-driven, embeddable browser on system WebKit.
 - ✅ Cast hook: extract page `<video>` src → casto.js (now accepts URLs)
 - ✅ `casto://` deep-link transport (AppleEvent + Info.plist; registers on build/install)
 - ✅ Packaging: build-app.sh (bundles casto.js + Node, sign/notarize)
-- ✅ Library hook: open the Casto Library web app inside the browser
-- 🟡 Tabs / multiple windows (next)
+- ✅ Library hook: ★ toolbar button opens the Casto Library in a tab
+- ✅ Tabs: themed tab strip, new/close, ⌘T / ⌘W / ⌘L, `window=new`
+- ⬜ Drag-reorder tabs, per-tab restore
 - ⬜ Library hook (browse, queue, "cast from library")
 - ⬜ Embeddable `CastoWebView` for other Swift apps to drop in
 - ⬜ Reader mode / simplicity features (the Min-inspired bits)

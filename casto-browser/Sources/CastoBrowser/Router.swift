@@ -21,6 +21,10 @@ struct Router {
       core.search(q)
       return ["ok": true]
 
+    case "library":
+      core.openLibrary()
+      return ["ok": true]
+
     case "navigate":
       core.navigate(query["action"] ?? "reload")
       return ["ok": true]

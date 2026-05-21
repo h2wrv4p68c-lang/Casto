@@ -40,6 +40,7 @@ Both transports share these actions (HTTP path == deep-link host == action):
 | search | `GET /search?q=…` | `casto://search?q=…` | Search query |
 | navigate | `GET /navigate?action=back\|forward\|reload` | `casto://navigate?action=…` | History/reload |
 | cast | `GET /cast?target=living-room&url=…` | `casto://cast?target=…` | Cast page media to a TV |
+| library | `GET /library` | `casto://library` | Open the Casto Library |
 | status | `GET /status` | `casto://status` | Current URL / state (JSON) |
 
 Every response is JSON, e.g. `{"ok":true}` or `{"ok":true,"url":"https://…"}`.
@@ -62,9 +63,12 @@ Working / wired:
 - `CastBridge` that shells out to `casto.js` (bundled into the .app), now
   casting remote URLs too.
 - "Cast" button extracts the page's first `<video>` source and casts it.
+- **Tabs** — themed tab strip, new/close (+ ⌘T / ⌘W / ⌘L), `open?window=new`.
+- **★ Library** toolbar button → opens the Casto Library (library.js) in a tab
+  (`CASTO_LIBRARY` env overrides the URL; default `http://localhost:8010`).
 
 Stubbed / next:
-- Tabs / multiple windows (`window=new` is currently a no-op).
+- Per-tab navigation history polish, drag-reorder tabs.
 - Library hook (browse/queue), reader mode, embeddable `CastoWebView` for other
   Swift apps to drop in.
 
