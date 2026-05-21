@@ -256,8 +256,11 @@ function pageHTML(libraryName) {
   .folder .thumb{aspect-ratio:2/3;font-size:54px}
   .findbtn{position:absolute;top:6px;right:6px;border:0;background:rgba(47,65,86,.85);color:#fff;border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer;display:none}
   .castbtn{right:auto;left:6px}
+  .rmbtn{right:auto;left:6px}
   .renbtn{top:auto;bottom:6px;right:6px}
   .card:hover .findbtn{display:block}
+  .card.off{opacity:.5;filter:grayscale(.5)}
+  .badge{position:absolute;left:0;right:0;bottom:0;background:rgba(47,65,86,.92);color:#fff;font-size:12px;text-align:center;padding:4px}
   .label{padding:10px 12px;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   button{font:inherit;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
   button.ghost{background:transparent;color:#f5e9cf;border:1px solid #f5e9cf}
@@ -370,6 +373,11 @@ function makeCard(it){
     img.onerror=()=>{ img.remove(); if(!thumb.textContent) thumb.textContent=fallback; };
     thumb.appendChild(img);
   } else { thumb.textContent = fallback; }
+  if(it.available===false){
+    card.classList.add('off');
+    const badge=document.createElement('div'); badge.className='badge'; badge.textContent='⏏ reconnect drive';
+    thumb.appendChild(badge);
+  }
   if(it.type==='video'){
     const cast=document.createElement('button');
     cast.className='findbtn castbtn'; cast.textContent='📺 cast'; cast.title='Cast to a TV (no local playback)';
@@ -382,6 +390,11 @@ function makeCard(it){
     card.ondragover=(e)=>{ e.preventDefault(); card.classList.add('over'); };
     card.ondragleave=()=> card.classList.remove('over');
     card.ondrop=(e)=>{ card.classList.remove('over'); handleDrop(e, it.id); };
+  } else {
+    const rm=document.createElement('button');
+    rm.className='findbtn rmbtn'; rm.textContent='✕'; rm.title='Remove from library (keeps files)';
+    rm.onclick=(e)=>{ e.stopPropagation(); removeFolder(it); };
+    thumb.appendChild(rm);
   }
   const ren=document.createElement('button');
   ren.className='findbtn renbtn'; ren.textContent='✎'; ren.title='Rename';
@@ -390,8 +403,16 @@ function makeCard(it){
   const label = document.createElement('div');
   label.className='label'; label.textContent = it.title;
   card.appendChild(thumb); card.appendChild(label);
-  card.onclick = () => it.type==='folder' ? browse(it.id) : play(it);
+  card.onclick = () => {
+    if(it.available===false){ return; }
+    it.type==='folder' ? browse(it.id) : play(it);
+  };
   return card;
+}
+async function removeFolder(it){
+  if(!confirm('Remove “'+it.title+'” from the library?\\nThis only drops it from Casto — your files are NOT deleted.')) return;
+  await fetch('/api/remove?id='+encodeURIComponent(it.id),{method:'POST'});
+  browse(current);
 }
 
 // --- Set a poster by drag-and-drop -----------------------------------------
@@ -578,16 +599,46 @@ async function main() {
   const count = [...objects.values()].filter((n) => !n.container).length;
   if (count === 0) { console.error('✗ No video files under ' + root); process.exit(1); }
 
-  // Custom display-title overrides, keyed by path relative to the library root.
+  // Custom display-title overrides + deliberately-removed folders, keyed by
+  // path relative to the library root.
   const CONFIG = path.join(root, '.casto-library.json');
-  const config = { titles: {} };
+  const config = { titles: {}, removed: [] };
   try { Object.assign(config, JSON.parse(fs.readFileSync(CONFIG, 'utf8'))); } catch (_) {}
+  config.titles = config.titles || {};
+  config.removed = config.removed || [];
   const relOf = (node) => path.relative(root, node.path || node.file);
   for (const node of objects.values()) {
     const t = config.titles[relOf(node)];
     if (t) node.title = t;
   }
   const saveConfig = () => { try { fs.writeFileSync(CONFIG, JSON.stringify(config)); } catch (_) {} };
+
+  // Remove a node and its descendants from the in-memory index.
+  const removeSubtree = (node) => {
+    for (const cid of node.children || []) { const c = objects.get(cid); if (c) removeSubtree(c); }
+    objects.delete(node.id);
+  };
+  const detach = (node) => {
+    const parent = objects.get(node.parentId);
+    if (parent && parent.children) parent.children = parent.children.filter((x) => x !== node.id);
+  };
+  const findByRel = (rel) => [...objects.values()].find((n) => n.id !== '0' && relOf(n) === rel);
+
+  // Apply deliberate removals persisted from earlier sessions.
+  for (const rel of config.removed) {
+    const n = findByRel(rel);
+    if (n) { detach(n); removeSubtree(n); }
+  }
+
+  // Availability: a folder whose path is gone (drive unplugged) is "pending",
+  // NOT removed — it returns when the path reappears. Checked periodically.
+  const checkAvailability = () => {
+    for (const n of objects.values()) {
+      if (n.container && n.path) n.unavailable = !fs.existsSync(n.path);
+    }
+  };
+  checkAvailability();
+  setInterval(checkAvailability, 10000);
 
   let rendererCache = { at: 0, list: [] };
   const castByDevice = new Map(); // tvName -> controlURL (active casts)
@@ -611,7 +662,8 @@ async function main() {
           const c = objects.get(cid);
           // Videos always get an /art URL (sidecar art, or 404 → UI fallback).
           const poster = c.art || !c.container ? `/art/${c.id}` : null;
-          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', poster };
+          const available = c.container ? !c.unavailable : !node.unavailable;
+          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', poster, available };
         });
         return json(res, 200, { ok: true, folder: { id: node.id, title: node.title }, breadcrumb: breadcrumb(objects, node.id), items });
       }
@@ -623,7 +675,8 @@ async function main() {
           for (const n of objects.values()) {
             if (n.container || n.id === '0') continue;
             if (n.title.toLowerCase().includes(query)) {
-              items.push({ id: n.id, title: n.title, type: 'video', poster: `/art/${n.id}` });
+              const parent = objects.get(n.parentId);
+              items.push({ id: n.id, title: n.title, type: 'video', poster: `/art/${n.id}`, available: parent ? !parent.unavailable : true });
             }
           }
         }
@@ -694,6 +747,22 @@ async function main() {
         config.titles[relOf(node)] = title;
         saveConfig();
         return json(res, 200, { ok: true, title });
+      }
+
+      // Deliberate removal: purge from the index and remember it (persisted),
+      // so it stays gone across restarts. Does NOT delete any files.
+      if (p === '/api/remove' && req.method === 'POST') {
+        const node = objects.get(u.searchParams.get('id') || '');
+        if (!node || node.id === '0') return json(res, 400, { ok: false, error: 'cannot remove' });
+        const rel = relOf(node);
+        detach(node);
+        removeSubtree(node);
+        if (!config.removed.includes(rel)) config.removed.push(rel);
+        for (const k of Object.keys(config.titles)) {
+          if (k === rel || k.startsWith(rel + path.sep)) delete config.titles[k];
+        }
+        saveConfig();
+        return json(res, 200, { ok: true });
       }
 
       if (p === '/api/stop' && req.method === 'POST') {

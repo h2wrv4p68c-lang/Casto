@@ -32,6 +32,8 @@ Browse a whole folder, with posters — the Plex-style aspect.
 - ✅ Search across the library + A→Z / Z→A sort
 - ✅ Per-TV "Now Playing" sessions manager (rewind/play/pause/forward/stop)
 - ✅ Works off attached external drives (point at the mount, e.g. /Volumes/…)
+- ✅ Deliberate "Remove from library" (persisted, files untouched) vs. an
+  unplugged drive going "pending" and auto-returning on reconnect
 - ⬜ Lazy indexing for very large external drives (huge upfront scan)
 - ⬜ NAS guidance (or run the existing NAS DLNA server instead)
 
