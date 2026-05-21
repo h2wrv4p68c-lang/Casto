@@ -137,6 +137,44 @@ async function tmdbPoster(title) {
   }
 }
 
+// --- Saving a poster (drag-and-drop / split-screen capture) ----------------
+
+function readBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let n = 0;
+    req.on('data', (c) => { n += c.length; if (n > limit) { req.destroy(); reject(new Error('image too large')); } else chunks.push(c); });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+function extForType(ct, src) {
+  ct = (ct || '').toLowerCase();
+  if (ct.includes('png')) return '.png';
+  if (ct.includes('webp')) return '.webp';
+  if (ct.includes('jpeg') || ct.includes('jpg')) return '.jpg';
+  const m = /\.(png|webp|jpe?g)(?:[?#]|$)/i.exec(src || '');
+  return m ? '.' + m[1].toLowerCase().replace('jpeg', 'jpg') : '.jpg';
+}
+// Download a dragged image URL (follows one redirect), capped at 10 MB.
+function fetchImage(url, depth = 0) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    const req = mod.get(url, { headers: { 'User-Agent': 'Casto' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && depth < 3) {
+        res.resume();
+        return resolve(fetchImage(new URL(res.headers.location, url).href, depth + 1));
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error('image HTTP ' + res.statusCode)); }
+      const chunks = []; let n = 0;
+      res.on('data', (c) => { n += c.length; if (n > 10 * 1024 * 1024) { res.destroy(); reject(new Error('image too large')); } else chunks.push(c); });
+      res.on('end', () => resolve({ buffer: Buffer.concat(chunks), contentType: res.headers['content-type'] }));
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => req.destroy(new Error('timeout')));
+  });
+}
+
 // --- DLNA cast (for the "Cast to TV" button) -------------------------------
 
 function discover(timeoutMs = 3000) {
@@ -233,27 +271,51 @@ function pageHTML(libraryName) {
   header h1{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;font-size:34px;margin:0}
   #crumbs{font-size:13px;color:var(--sub);letter-spacing:.08em;text-transform:uppercase}
   #crumbs a{color:var(--accent);cursor:pointer;text-decoration:none}
+  .toggle{margin-left:auto;font-size:13px;color:var(--sub);cursor:pointer;display:flex;align-items:center;gap:6px}
   #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px;padding:24px}
   .card{background:var(--card);border-radius:10px;overflow:hidden;cursor:pointer;box-shadow:0 2px 8px rgba(60,40,15,.18);transition:transform .12s}
   .card:hover{transform:translateY(-3px)}
-  .thumb{aspect-ratio:2/3;background:#d8c191;display:flex;align-items:center;justify-content:center;font-size:46px;color:#a07e4e;overflow:hidden}
+  .card.over{outline:3px dashed var(--accent);outline-offset:-3px}
+  .thumb{position:relative;aspect-ratio:2/3;background:#d8c191;display:flex;align-items:center;justify-content:center;font-size:46px;color:#a07e4e;overflow:hidden}
   .thumb img{width:100%;height:100%;object-fit:cover;display:block}
   .folder .thumb{aspect-ratio:2/3;font-size:54px}
+  .findbtn{position:absolute;top:6px;right:6px;border:0;background:rgba(47,65,86,.85);color:#fff;border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer;display:none}
+  .card:hover .findbtn{display:block}
   .label{padding:10px 12px;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* player overlay */
-  #overlay{position:fixed;inset:0;background:rgba(20,12,4,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px}
-  #overlay video{max-width:90vw;max-height:72vh;background:#000;border-radius:8px}
-  #overlay .row{display:flex;gap:10px;align-items:center}
   button{font:inherit;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
   button.ghost{background:transparent;color:#f5e9cf;border:1px solid #f5e9cf}
   select{font:inherit;padding:8px;border-radius:8px}
+  /* find-poster split panel */
+  #finder{display:none;position:fixed;right:0;top:62px;bottom:0;width:42%;background:var(--card);border-left:2px solid var(--accent);flex-direction:column;padding:18px;gap:12px;z-index:5}
+  body.split #grid{width:56%}
+  .frow{display:flex;gap:10px;align-items:center}
+  #finderTitle{font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;flex:1}
+  #finderTitle b{color:var(--ink)}
+  #dropzone{flex:1;border:3px dashed var(--accent);border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--sub);padding:20px}
+  #dropzone.over{background:#efe2c4}
+  .hint{font-size:12px;color:var(--sub)}
+  /* player overlay */
+  #overlay{position:fixed;inset:0;background:rgba(20,12,4,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;z-index:10}
+  #overlay video{max-width:90vw;max-height:72vh;background:#000;border-radius:8px}
+  #overlay .row{display:flex;gap:10px;align-items:center}
   #ptitle{color:#f5e9cf;font-family:'Cormorant Garamond',Georgia,serif;font-size:24px}
 </style></head><body>
 <header>
   <h1>Casto</h1>
   <div id="crumbs"></div>
+  <label class="toggle"><input type="checkbox" id="onlineToggle"> Online posters<span id="keyNote"></span></label>
 </header>
 <div id="grid"></div>
+
+<aside id="finder">
+  <div class="frow"><div id="finderTitle"></div><button class="ghost" id="finderClose" style="color:var(--accent);border-color:var(--accent)">Close</button></div>
+  <div class="frow">
+    <button id="googleImg">Google Images ↗</button>
+    <button id="bingImg">Bing Images ↗</button>
+  </div>
+  <div class="hint">Opens an image search in a new window. Drag a poster from there onto the box below (or drop one from your desktop).</div>
+  <div id="dropzone">Drag a poster image here</div>
+</aside>
 
 <div id="overlay">
   <div id="ptitle"></div>
@@ -268,10 +330,12 @@ function pageHTML(libraryName) {
 
 <script>
 let current = '0';
+let finderItem = null;
+function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
+
 async function browse(id){
   current = id;
-  const r = await fetch('/api/browse?id='+encodeURIComponent(id));
-  const data = await r.json();
+  const data = await (await fetch('/api/browse?id='+encodeURIComponent(id))).json();
   document.getElementById('crumbs').innerHTML =
     data.breadcrumb.map(c => '<a onclick="browse(\\''+c.id+'\\')">'+esc(c.title)+'</a>').join(' › ');
   const grid = document.getElementById('grid');
@@ -284,9 +348,18 @@ async function browse(id){
     const fallback = it.type==='folder' ? '📁' : '🎬';
     if(it.poster){
       const img=document.createElement('img'); img.src=it.poster; img.loading='lazy';
-      img.onerror=()=>{ img.remove(); thumb.textContent=fallback; };
+      img.onerror=()=>{ img.remove(); if(!thumb.textContent) thumb.textContent=fallback; };
       thumb.appendChild(img);
     } else { thumb.textContent = fallback; }
+    if(it.type==='video'){
+      const find=document.createElement('button');
+      find.className='findbtn'; find.textContent='🔍 poster'; find.title='Find a poster';
+      find.onclick=(e)=>{ e.stopPropagation(); openFinder(it); };
+      thumb.appendChild(find);
+      card.ondragover=(e)=>{ e.preventDefault(); card.classList.add('over'); };
+      card.ondragleave=()=> card.classList.remove('over');
+      card.ondrop=(e)=>{ card.classList.remove('over'); handleDrop(e, it.id); };
+    }
     const label = document.createElement('div');
     label.className='label'; label.textContent = it.title;
     card.appendChild(thumb); card.appendChild(label);
@@ -294,7 +367,64 @@ async function browse(id){
     grid.appendChild(card);
   }
 }
-function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
+
+// --- Set a poster by drag-and-drop -----------------------------------------
+function handleDrop(e, id){
+  e.preventDefault();
+  const dt = e.dataTransfer;
+  const f = dt.files && [...dt.files].find(x => x.type.startsWith('image/'));
+  if(f){ uploadPoster(id, f); return; }
+  const url = (dt.getData('text/uri-list') || dt.getData('text/plain') || '').trim().split('\\n')[0];
+  if(/^https?:\\/\\//i.test(url)) savePosterFromURL(id, url);
+}
+async function uploadPoster(id, file){
+  await fetch('/api/poster?id='+encodeURIComponent(id), {method:'POST', headers:{'Content-Type':file.type}, body:file});
+  afterPoster(id);
+}
+async function savePosterFromURL(id, url){
+  await fetch('/api/poster?id='+encodeURIComponent(id)+'&src='+encodeURIComponent(url), {method:'POST'});
+  afterPoster(id);
+}
+function afterPoster(id){
+  browse(current);
+  if(finderItem && finderItem.id===id) closeFinder();
+}
+
+// --- Find-poster split panel -----------------------------------------------
+function openFinder(it){
+  finderItem = it;
+  document.getElementById('finderTitle').innerHTML = 'Poster for <b>'+esc(it.title)+'</b>';
+  document.body.classList.add('split');
+  document.getElementById('finder').style.display='flex';
+  const q = encodeURIComponent(it.title.replace(/[._]+/g,' ') + ' movie poster');
+  document.getElementById('googleImg').onclick=()=>window.open('https://www.google.com/search?tbm=isch&q='+q,'casto_imgsearch');
+  document.getElementById('bingImg').onclick=()=>window.open('https://www.bing.com/images/search?q='+q,'casto_imgsearch');
+}
+function closeFinder(){
+  finderItem=null;
+  document.body.classList.remove('split');
+  document.getElementById('finder').style.display='none';
+}
+document.getElementById('finderClose').onclick=closeFinder;
+(function(){
+  const dz=document.getElementById('dropzone');
+  dz.ondragover=(e)=>{ e.preventDefault(); dz.classList.add('over'); };
+  dz.ondragleave=()=> dz.classList.remove('over');
+  dz.ondrop=(e)=>{ dz.classList.remove('over'); if(finderItem) handleDrop(e, finderItem.id); };
+})();
+
+// --- Online-posters setting ------------------------------------------------
+async function loadSettings(){
+  const d = await (await fetch('/api/settings')).json();
+  document.getElementById('onlineToggle').checked = d.internetPosters;
+  document.getElementById('keyNote').textContent = d.hasKey ? '' : ' (needs TMDB_API_KEY)';
+}
+document.getElementById('onlineToggle').onchange = async (e)=>{
+  await fetch('/api/settings?internet='+(e.target.checked), {method:'POST'});
+  browse(current);
+};
+
+// --- Inline player + cast --------------------------------------------------
 let playingId = null;
 function play(it){
   playingId = it.id;
@@ -308,7 +438,7 @@ function play(it){
 async function loadDevices(){
   const sel = document.getElementById('devices');
   sel.innerHTML = '<option value="">Finding TVs…</option>';
-  const r = await fetch('/api/devices'); const d = await r.json();
+  const d = await (await fetch('/api/devices')).json();
   sel.innerHTML = '<option value="">Cast to TV…</option>' +
     d.devices.map(x=>'<option value="'+esc(x.name)+'">'+esc(x.name)+'</option>').join('');
 }
@@ -317,14 +447,15 @@ document.getElementById('castBtn').onclick = async () => {
   const st = document.getElementById('caststatus');
   if(!target){ st.textContent='Pick a TV first.'; return; }
   st.textContent='Casting…';
-  const r = await fetch('/api/cast?id='+encodeURIComponent(playingId)+'&target='+encodeURIComponent(target),{method:'POST'});
-  const d = await r.json();
+  const d = await (await fetch('/api/cast?id='+encodeURIComponent(playingId)+'&target='+encodeURIComponent(target),{method:'POST'})).json();
   st.textContent = d.ok ? ('Casting to '+target) : ('Failed: '+(d.error||'unknown'));
 };
 document.getElementById('closeBtn').onclick = () => {
   const v=document.getElementById('player'); v.pause(); v.src='';
   document.getElementById('overlay').style.display='none';
 };
+
+loadSettings();
 browse('0');
 </script>
 </body></html>`;
@@ -358,6 +489,12 @@ async function main() {
   const count = [...objects.values()].filter((n) => !n.container).length;
   if (count === 0) { console.error('✗ No video files under ' + root); process.exit(1); }
 
+  // Persisted settings (currently just the online-poster toggle).
+  const CONFIG = path.join(root, '.casto-library.json');
+  const settings = { internetPosters: true };
+  try { Object.assign(settings, JSON.parse(fs.readFileSync(CONFIG, 'utf8'))); } catch (_) {}
+  const saveSettings = () => { try { fs.writeFileSync(CONFIG, JSON.stringify(settings)); } catch (_) {} };
+
   let rendererCache = { at: 0, list: [] };
   const renderers = async () => {
     if (Date.now() - rendererCache.at < 60000 && rendererCache.list.length) return rendererCache.list;
@@ -389,6 +526,35 @@ async function main() {
         return json(res, 200, { ok: true, devices: list.map((d) => ({ name: d.name })) });
       }
 
+      if (p === '/api/settings') {
+        if (req.method === 'POST' && u.searchParams.has('internet')) {
+          settings.internetPosters = u.searchParams.get('internet') === 'true';
+          saveSettings();
+        }
+        return json(res, 200, { ok: true, internetPosters: settings.internetPosters, hasKey: !!TMDB_API_KEY });
+      }
+
+      if (p === '/api/poster' && req.method === 'POST') {
+        const node = objects.get(u.searchParams.get('id') || '');
+        if (!node || node.container) return json(res, 404, { ok: false, error: 'item not found' });
+        const src = u.searchParams.get('src');
+        let buf, ext;
+        if (src) {
+          const got = await fetchImage(src);
+          buf = got.buffer; ext = extForType(got.contentType, src);
+        } else {
+          buf = await readBody(req, 12 * 1024 * 1024);
+          ext = extForType(req.headers['content-type'], '');
+        }
+        if (!buf || !buf.length) return json(res, 400, { ok: false, error: 'no image data' });
+        const dir = path.dirname(node.file);
+        const dest = path.join(dir, path.basename(node.file, path.extname(node.file)) + ext);
+        fs.writeFileSync(dest, buf);
+        node.art = dest;
+        posterCache.delete(node.id);
+        return json(res, 200, { ok: true, poster: `/art/${node.id}` });
+      }
+
       if (p === '/api/cast' && req.method === 'POST') {
         const node = objects.get(u.searchParams.get('id') || '');
         if (!node || node.container) return json(res, 404, { ok: false, error: 'item not found' });
@@ -412,7 +578,7 @@ async function main() {
           return serveFile(req, res, node.art, IMAGE_TYPES[path.extname(node.art).toLowerCase()] || 'image/jpeg');
         }
         // No sidecar art: try TMDb (cached), redirect to its poster image.
-        if (!TMDB_API_KEY || node.container) { res.writeHead(404); return res.end('Not found'); }
+        if (!settings.internetPosters || !TMDB_API_KEY || node.container) { res.writeHead(404); return res.end('Not found'); }
         let url = posterCache.get(node.id);
         if (url === undefined) { url = await tmdbPoster(node.title); posterCache.set(node.id, url); }
         if (url) { res.writeHead(302, { Location: url }); return res.end(); }
