@@ -11,6 +11,9 @@ The "fling one file to the TV" tool.
 - ✅ Subtitles: sidecar detect, SRT + auto-built SMI fallback
 - ✅ Transport: play/pause/stop, relative seek; stdin line commands + `--first`
 - ✅ Remote `http(s)` URL casting (no local server)
+- ✅ Multi-TV cast daemon (`castd.js`): one shared media server, a session
+  per renderer, control API — different streams on different TVs at once
+  (DLNA = no frame-sync across rooms)
 
 ## M1 — Library server ✅
 Browse a whole folder from the TV.

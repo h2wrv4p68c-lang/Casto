@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node casto.js",
     "serve": "node server.js",
+    "castd": "node castd.js",
     "menubar": "swift menubar.swift"
   },
   "license": "MIT"
