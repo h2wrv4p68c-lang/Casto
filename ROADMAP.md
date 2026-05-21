@@ -40,6 +40,11 @@ Browse a whole folder, with posters — the Plex-style aspect.
   drive being unplugged / a trip out, no reindex; auto-refresh on reconnect
 - ✅ User-triggered ↻ Rescan
 - ✅ caffeinate keeps the Mac awake while serving so streams don't pause
+- ✅ Concurrency hardening: posters resolved from the dir listing (no per-file
+  fs), async readdir, availability checks the mount only (O(1)), debounced
+  async cache writes — no event-loop stalls while serving a huge drive
+- ⬜ server.js still does a synchronous full DLNA scan at startup (only matters
+  if you browse the 4TB drive directly from the TV) — lazy DLNA is the fix
 - ⬜ NAS guidance (or run the existing NAS DLNA server instead)
 
 ## M2 — macOS menu-bar app ✅ (build-unverified)

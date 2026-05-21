@@ -58,40 +58,47 @@ const xmlEscape = (s) =>
 
 // --- Lazy, non-blocking indexing -------------------------------------------
 // Folders are scanned one level at a time, on demand (browse) or by a
-// background crawl. Nothing scans the whole tree synchronously, so startup and
-// requests never block — even on a huge external drive.
+// background crawl. Scanning uses async readdir and resolves posters from the
+// directory listing we already have (no per-file fs), so it never blocks the
+// event loop — even on a huge external drive.
 
-function posterFor(filePath, isDir) {
-  const dir = isDir ? filePath : path.dirname(filePath);
-  if (!isDir) {
-    const base = path.basename(filePath, path.extname(filePath));
-    for (const ext of IMAGE_EXTS) { const p = path.join(dir, base + ext); if (fs.existsSync(p)) return p; }
-  }
-  for (const name of POSTER_NAMES)
-    for (const ext of IMAGE_EXTS) { const p = path.join(dir, name + ext); if (fs.existsSync(p)) return p; }
+const fsp = fs.promises;
+
+// Find a folder-level poster (poster/folder/cover/thumb.*) from a Set of the
+// folder's own filenames — no filesystem hit.
+function folderPoster(dir, names) {
+  for (const nm of POSTER_NAMES)
+    for (const ext of IMAGE_EXTS)
+      if (names.has(nm + ext)) return path.join(dir, nm + ext);
   return null;
 }
 
 function makeRoot(root, config) {
-  return { id: '0', parentId: '-1', container: true, title: config.titles[''] || path.basename(root) || 'Library', path: root, art: posterFor(root, true), children: [], scanned: false };
+  // art is filled when the root is first scanned (from its own listing).
+  return { id: '0', parentId: '-1', container: true, title: config.titles[''] || path.basename(root) || 'Library', path: root, art: null, children: [], scanned: false };
 }
 
-// Scan one folder level into `ctx.map`, applying title overrides and skipping
-// deliberately-removed paths. Idempotent unless `force`.
-function scanDirInto(ctx, node, root, config, force) {
-  if (node.scanned && !force) return;
+// Scan one folder level into `ctx.map`. Async, and posters come from the
+// already-read directory entries — so a folder of thousands of files costs a
+// single readdir, not thousands of stat/exists calls.
+async function scanDirInto(ctx, node, root, config) {
+  if (node.scanned) return;
   node.scanned = true;
   node.children = [];
   let entries = [];
-  try { entries = fs.readdirSync(node.path, { withFileTypes: true }); } catch (_) { return; }
+  try { entries = await fsp.readdir(node.path, { withFileTypes: true }); } catch (_) { return; }
+  const fileNames = new Set(entries.filter((e) => e.isFile()).map((e) => e.name));
+  if (!node.art) node.art = folderPoster(node.path, fileNames);
+
   const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).sort((a, b) => a.name.localeCompare(b.name));
   const files = entries.filter((e) => e.isFile() && VIDEO_EXTS.includes(path.extname(e.name).toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
+
   for (const d of dirs) {
     const dp = path.join(node.path, d.name);
     const rel = path.relative(root, dp);
     if (config.removed.includes(rel)) continue;
     const id = String(ctx.nextId++);
-    ctx.map.set(id, { id, parentId: node.id, container: true, title: config.titles[rel] || d.name, path: dp, art: posterFor(dp, true), children: [], scanned: false });
+    ctx.map.set(id, { id, parentId: node.id, container: true, title: config.titles[rel] || d.name, path: dp, art: null, children: [], scanned: false });
     node.children.push(id);
   }
   for (const f of files) {
@@ -99,15 +106,17 @@ function scanDirInto(ctx, node, root, config, force) {
     const rel = path.relative(root, fp);
     if (config.removed.includes(rel)) continue;
     const ext = path.extname(f.name).toLowerCase();
+    const base = path.basename(f.name, ext);
+    let art = null;
+    for (const ie of IMAGE_EXTS) if (fileNames.has(base + ie)) { art = path.join(node.path, base + ie); break; }
+    if (!art) art = node.art; // fall back to the folder poster
     const id = String(ctx.nextId++);
-    let size = 0; try { size = fs.statSync(fp).size; } catch (_) {}
-    ctx.map.set(id, { id, parentId: node.id, container: false, title: config.titles[rel] || path.basename(f.name, ext), file: fp, contentType: CONTENT_TYPES[ext] || 'video/mp4', size, art: posterFor(fp, false) });
+    ctx.map.set(id, { id, parentId: node.id, container: false, title: config.titles[rel] || base, file: fp, contentType: CONTENT_TYPES[ext] || 'video/mp4', art });
     node.children.push(id);
   }
 }
 
-// Build the whole tree into a fresh map, yielding to the event loop between
-// folders so it never blocks the server.
+// Build the whole tree into a fresh map, yielding between folders.
 async function buildAsync(root, config) {
   const ctx = { map: new Map(), nextId: 1 };
   const rootNode = makeRoot(root, config);
@@ -115,7 +124,7 @@ async function buildAsync(root, config) {
   const queue = [rootNode];
   while (queue.length) {
     const node = queue.shift();
-    if (fs.existsSync(node.path)) scanDirInto(ctx, node, root, config);
+    await scanDirInto(ctx, node, root, config);
     for (const cid of node.children) { const c = ctx.map.get(cid); if (c && c.container) queue.push(c); }
     await new Promise((r) => setImmediate(r));
   }
@@ -649,16 +658,26 @@ async function main() {
   const maxId = () => [...objects.keys()].reduce((m, k) => Math.max(m, +k || 0), 0);
   const serialize = () => [...objects.values()].map((n) =>
     ({ id: n.id, parentId: n.parentId, container: n.container, title: n.title, path: n.path, file: n.file, contentType: n.contentType, size: n.size, art: n.art, children: n.children, scanned: n.scanned }));
+  let saveTimer = null;
   const saveConfig = () => {
-    try { config.index = serialize(); fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(stateFile, JSON.stringify(config)); } catch (_) {}
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      config.index = serialize();
+      fsp.mkdir(STATE_DIR, { recursive: true })
+        .then(() => fsp.writeFile(stateFile, JSON.stringify(config)))
+        .catch(() => {});
+    }, 500);
   };
+  // A disconnect drops the whole mount, so one check on the root suffices —
+  // far cheaper than an fs hit per folder on a big library.
   const markAvailability = () => {
-    for (const n of objects.values()) if (n.container && n.path) n.unavailable = !fs.existsSync(n.path);
+    const up = fs.existsSync(root);
+    for (const n of objects.values()) if (n.container) n.unavailable = !up;
   };
   // Lazy: scan a folder the first time it's browsed (instant, one level).
-  const ensureScanned = (node) => {
+  const ensureScanned = async (node) => {
     if (node && node.container && !node.scanned && fs.existsSync(node.path)) {
-      scanDirInto(liveCtx, node, root, config);
+      await scanDirInto(liveCtx, node, root, config);
     }
   };
 
@@ -724,7 +743,7 @@ async function main() {
       if (p === '/api/browse') {
         const node = objects.get(u.searchParams.get('id') || '0');
         if (!node) return json(res, 404, { ok: false });
-        ensureScanned(node); // lazy: scan this folder on first visit
+        await ensureScanned(node); // lazy: scan this folder on first visit
         const items = (node.children || []).map((cid) => {
           const c = objects.get(cid);
           // Videos always get an /art URL (sidecar art, or 404 → UI fallback).

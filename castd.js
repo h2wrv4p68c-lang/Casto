@@ -299,25 +299,29 @@ async function main() {
   const token = loadToken();
   const autoplayDefault = argv.includes('--autoplay');
 
-  // Optional media library: index a folder so the CLI can list/cast by name.
+  // Optional media library: index a folder (in the background, non-blocking)
+  // so the CLI can list/cast by name. The list fills as the crawl proceeds.
+  const fsp = fs.promises;
   const libraryDir = get('--library', null);
   const library = []; // { id, title, file }
   if (libraryDir) {
-    const root = path.resolve(libraryDir);
+    const libRoot = path.resolve(libraryDir);
     let id = 1;
-    (function walk(dir) {
+    const walk = async (dir) => {
       let entries = [];
-      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+      try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch (_) { return; }
       for (const e of entries) {
         if (e.name.startsWith('.')) continue;
         const fp = path.join(dir, e.name);
-        if (e.isDirectory()) walk(fp);
+        if (e.isDirectory()) await walk(fp);
         else if (VIDEO_EXTS.includes(path.extname(e.name).toLowerCase()))
           library.push({ id: String(id++), title: path.basename(e.name, path.extname(e.name)), file: fp });
       }
-    })(root);
+      await new Promise((r) => setImmediate(r));
+    };
+    walk(libRoot); // fire-and-forget; startup is not blocked
   }
-  const libById = new Map(library.map((m) => [m.id, m]));
+  const libById = (id) => library.find((m) => m.id === id);
   const libByName = (name) =>
     library.find((m) => m.title.toLowerCase().includes(String(name).toLowerCase()));
 
@@ -333,7 +337,7 @@ async function main() {
   // URL + metadata. Local files are registered on the shared media server.
   const resolveSource = (raw) => {
     let src = raw;
-    const lib = libById.get(raw) || libByName(raw);
+    const lib = libById(raw) || libByName(raw);
     if (lib) src = lib.file;
     if (isRemote(src)) {
       return {
@@ -424,7 +428,7 @@ async function main() {
         if (!tv) return json(res, 400, { ok: false, error: 'missing tv' });
         const raw = q.src || q.id || q.name;
         if (!raw) return json(res, 400, { ok: false, error: 'missing src/id/name' });
-        const lib = libById.get(raw) || libByName(raw);
+        const lib = libById(raw) || libByName(raw);
         queueFor(tv).push({ src: raw, title: lib ? lib.title : raw });
         return json(res, 200, { ok: true, tv, queued: queueFor(tv).length });
       }
