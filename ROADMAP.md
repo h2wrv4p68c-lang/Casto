@@ -21,8 +21,8 @@ Browse a whole folder, with posters — the Plex-style aspect.
 - ✅ Library web app (`library.js`): poster-grid UI (wood theme), folder nav,
   inline play, and Cast-to-TV per item; works in any browser / Casto Browser
 - ✅ Folder → tree, Range streaming, sidecar poster art
+- ✅ TMDb poster fetch for files without sidecar art (set `TMDB_API_KEY`)
 - ⬜ Lazy indexing for very large / external-drive libraries
-- ⬜ Metadata/poster fetch (e.g. TMDb) for files without sidecar art
 - ⬜ NAS guidance (or run the existing NAS DLNA server instead)
 
 ## M2 — macOS menu-bar app ✅ (build-unverified)
@@ -43,8 +43,8 @@ Lightweight, API-driven, embeddable browser on system WebKit.
 - ✅ `casto://` deep-link transport (AppleEvent + Info.plist; registers on build/install)
 - ✅ Packaging: build-app.sh (bundles casto.js + Node, sign/notarize)
 - ✅ Library hook: ★ toolbar button opens the Casto Library in a tab
-- ✅ Tabs: themed tab strip, new/close, ⌘T / ⌘W / ⌘L, `window=new`
-- ⬜ Drag-reorder tabs, per-tab restore
+- ✅ Tabs: themed tab strip, new/close, ⌘T / ⌘W / ⌘L, drag-reorder, `window=new`
+- ⬜ Per-tab session restore on relaunch
 - ⬜ Library hook (browse, queue, "cast from library")
 - ⬜ Embeddable `CastoWebView` for other Swift apps to drop in
 - ⬜ Reader mode / simplicity features (the Min-inspired bits)

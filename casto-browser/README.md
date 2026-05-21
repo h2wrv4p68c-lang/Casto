@@ -63,12 +63,13 @@ Working / wired:
 - `CastBridge` that shells out to `casto.js` (bundled into the .app), now
   casting remote URLs too.
 - "Cast" button extracts the page's first `<video>` source and casts it.
-- **Tabs** — themed tab strip, new/close (+ ⌘T / ⌘W / ⌘L), `open?window=new`.
+- **Tabs** — themed tab strip, new/close (+ ⌘T / ⌘W / ⌘L), drag-to-reorder,
+  `open?window=new`.
 - **★ Library** toolbar button → opens the Casto Library (library.js) in a tab
   (`CASTO_LIBRARY` env overrides the URL; default `http://localhost:8010`).
 
 Stubbed / next:
-- Per-tab navigation history polish, drag-reorder tabs.
+- Per-tab restore on relaunch; embeddable `CastoWebView` for other apps.
 - Library hook (browse/queue), reader mode, embeddable `CastoWebView` for other
   Swift apps to drop in.
 

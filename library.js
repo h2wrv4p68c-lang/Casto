@@ -13,9 +13,13 @@
 const fs = require('fs');
 const os = require('os');
 const http = require('http');
+const https = require('https');
 const path = require('path');
 const dgram = require('dgram');
 const { URL } = require('url');
+
+// Optional: set TMDB_API_KEY to auto-fetch posters for files without sidecar art.
+const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
 
 const AVT = 'urn:schemas-upnp-org:service:AVTransport:1';
 const SSDP_ADDR = '239.255.255.250';
@@ -94,6 +98,43 @@ function buildTree(root) {
   }
   scan(root, '-1', path.basename(root) || 'Library');
   return objects;
+}
+
+// --- TMDb poster lookup (optional) -----------------------------------------
+
+const posterCache = new Map(); // node.id -> url | null
+
+function cleanTitle(t) {
+  return t
+    .replace(/[._]+/g, ' ')
+    .replace(/[\[(].*?[\])]/g, '')
+    .replace(/\b(1080p|720p|2160p|4k|bluray|brrip|webrip|web-dl|hdrip|dvdrip|x264|x265|h264|h265|hevc|aac|ac3|dts|remux|proper|extended)\b.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function httpsGetJSON(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      let d = '';
+      res.on('data', (c) => (d += c));
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+    }).on('error', reject);
+  });
+}
+
+async function tmdbPoster(title) {
+  if (!TMDB_API_KEY) return null;
+  const q = cleanTitle(title);
+  if (!q) return null;
+  try {
+    const data = await httpsGetJSON(
+      `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(q)}`);
+    const hit = (data.results || []).find((r) => r.poster_path);
+    return hit ? `https://image.tmdb.org/t/p/w500${hit.poster_path}` : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 // --- DLNA cast (for the "Cast to TV" button) -------------------------------
@@ -195,7 +236,8 @@ function pageHTML(libraryName) {
   #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px;padding:24px}
   .card{background:var(--card);border-radius:10px;overflow:hidden;cursor:pointer;box-shadow:0 2px 8px rgba(60,40,15,.18);transition:transform .12s}
   .card:hover{transform:translateY(-3px)}
-  .thumb{aspect-ratio:2/3;background:#d8c191 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:46px;color:#a07e4e}
+  .thumb{aspect-ratio:2/3;background:#d8c191;display:flex;align-items:center;justify-content:center;font-size:46px;color:#a07e4e;overflow:hidden}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
   .folder .thumb{aspect-ratio:2/3;font-size:54px}
   .label{padding:10px 12px;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* player overlay */
@@ -239,8 +281,12 @@ async function browse(id){
     card.className = 'card' + (it.type==='folder'?' folder':'');
     const thumb = document.createElement('div');
     thumb.className='thumb';
-    if(it.poster) thumb.style.backgroundImage = "url('"+it.poster+"')";
-    else thumb.textContent = it.type==='folder' ? '📁' : '🎬';
+    const fallback = it.type==='folder' ? '📁' : '🎬';
+    if(it.poster){
+      const img=document.createElement('img'); img.src=it.poster; img.loading='lazy';
+      img.onerror=()=>{ img.remove(); thumb.textContent=fallback; };
+      thumb.appendChild(img);
+    } else { thumb.textContent = fallback; }
     const label = document.createElement('div');
     label.className='label'; label.textContent = it.title;
     card.appendChild(thumb); card.appendChild(label);
@@ -331,7 +377,9 @@ async function main() {
         if (!node) return json(res, 404, { ok: false });
         const items = (node.children || []).map((cid) => {
           const c = objects.get(cid);
-          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', poster: c.art ? `/art/${c.id}` : null };
+          // Videos always get an /art URL (local file, TMDb, or 404 → UI fallback).
+          const poster = c.art || !c.container ? `/art/${c.id}` : null;
+          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', poster };
         });
         return json(res, 200, { ok: true, folder: { id: node.id, title: node.title }, breadcrumb: breadcrumb(objects, node.id), items });
       }
@@ -359,8 +407,17 @@ async function main() {
       }
       if (p.startsWith('/art/')) {
         const node = objects.get(p.slice('/art/'.length));
-        if (!node || !node.art) { res.writeHead(404); return res.end('Not found'); }
-        return serveFile(req, res, node.art, IMAGE_TYPES[path.extname(node.art).toLowerCase()] || 'image/jpeg');
+        if (!node) { res.writeHead(404); return res.end('Not found'); }
+        if (node.art) {
+          return serveFile(req, res, node.art, IMAGE_TYPES[path.extname(node.art).toLowerCase()] || 'image/jpeg');
+        }
+        // No sidecar art: try TMDb (cached), redirect to its poster image.
+        if (!TMDB_API_KEY || node.container) { res.writeHead(404); return res.end('Not found'); }
+        let url = posterCache.get(node.id);
+        if (url === undefined) { url = await tmdbPoster(node.title); posterCache.set(node.id, url); }
+        if (url) { res.writeHead(302, { Location: url }); return res.end(); }
+        res.writeHead(404); res.end('Not found');
+        return;
       }
       res.writeHead(404); res.end('Not found');
     } catch (e) {
@@ -370,6 +427,7 @@ async function main() {
 
   server.listen(port, '0.0.0.0', () => {
     console.log(`▶ "${name}" — ${count} videos`);
+    console.log(`  posters: sidecar art${TMDB_API_KEY ? ' + TMDb lookup' : ' (set TMDB_API_KEY for auto-posters)'}`);
     console.log(`  open  http://localhost:${port}`);
     console.log(`  (on your network: http://${host}:${port})`);
   });

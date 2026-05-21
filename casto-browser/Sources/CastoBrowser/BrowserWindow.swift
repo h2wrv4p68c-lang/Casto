@@ -131,32 +131,14 @@ final class BrowserWindow: NSWindow, WKNavigationDelegate {
   private func rebuildTabBar() {
     tabBar.subviews.forEach { $0.removeFromSuperview() }
     for (i, tab) in tabs.enumerated() {
-      let x = CGFloat(i) * tabW
-      let container = NSView(frame: NSRect(x: x, y: 0, width: tabW, height: tabBarH))
-      container.wantsLayer = true
-      container.layer?.backgroundColor = (i == activeIndex ? woodCard : woodBg).cgColor
-
-      let titleBtn = NSButton(frame: NSRect(x: 6, y: 0, width: tabW - 28, height: tabBarH))
-      titleBtn.title = tab.title
-      titleBtn.isBordered = false
-      titleBtn.alignment = .left
-      titleBtn.lineBreakMode = .byTruncatingTail
-      titleBtn.contentTintColor = woodInk
-      titleBtn.tag = i
-      titleBtn.target = self
-      titleBtn.action = #selector(tabClicked(_:))
-
-      let closeBtn = NSButton(frame: NSRect(x: tabW - 22, y: 5, width: 18, height: 18))
-      closeBtn.title = "×"
-      closeBtn.isBordered = false
-      closeBtn.contentTintColor = woodInk
-      closeBtn.tag = i
-      closeBtn.target = self
-      closeBtn.action = #selector(tabClosed(_:))
-
-      container.addSubview(titleBtn)
-      container.addSubview(closeBtn)
-      tabBar.addSubview(container)
+      let view = TabView(frame: NSRect(x: CGFloat(i) * tabW, y: 0, width: tabW, height: tabBarH))
+      view.index = i
+      view.title = tab.title
+      view.isActive = (i == activeIndex)
+      view.onSelect = { [weak self] idx in self?.selectTab(idx) }
+      view.onClose = { [weak self] idx in self?.closeTab(idx) }
+      view.onDrop = { [weak self] v in self?.tabDropped(v) }
+      tabBar.addSubview(view)
     }
     let plus = NSButton(frame: NSRect(x: CGFloat(tabs.count) * tabW + 4, y: 3, width: 26, height: 24))
     plus.title = "+"
@@ -167,9 +149,24 @@ final class BrowserWindow: NSWindow, WKNavigationDelegate {
     tabBar.addSubview(plus)
   }
 
-  @objc private func tabClicked(_ s: NSButton) { selectTab(s.tag) }
-  @objc private func tabClosed(_ s: NSButton) { closeTab(s.tag) }
   @objc private func newTabClicked(_ s: Any?) { newTab(nil); core?.open(URL(string: "https://duckduckgo.com")!) }
+
+  // Drag finished: pick the destination slot from the view's current position.
+  private func tabDropped(_ view: TabView) {
+    let target = max(0, min(Int((view.frame.midX) / tabW), tabs.count - 1))
+    moveTab(from: view.index, to: target)
+  }
+
+  private func moveTab(from: Int, to: Int) {
+    guard tabs.indices.contains(from) else { rebuildTabBar(); return }
+    let dest = max(0, min(to, tabs.count - 1))
+    if from == dest { rebuildTabBar(); return }
+    let activeTab = tabs[activeIndex]
+    let moved = tabs.remove(at: from)
+    tabs.insert(moved, at: dest)
+    activeIndex = tabs.firstIndex(where: { $0 === activeTab }) ?? dest
+    rebuildTabBar()
+  }
 
   // MARK: - Toolbar
 
@@ -214,5 +211,56 @@ final class BrowserWindow: NSWindow, WKNavigationDelegate {
     tabs[idx].title = wv.title?.isEmpty == false ? wv.title! : (wv.url?.host ?? "Tab")
     if idx == activeIndex { setAddress(wv.url?.absoluteString ?? "") }
     rebuildTabBar()
+  }
+}
+
+// A single tab: draws its own title/close, selects on click, and reorders by
+// dragging (the parent finalizes the new slot on drop).
+final class TabView: NSView {
+  var index = 0
+  var title = "" { didSet { needsDisplay = true } }
+  var isActive = false { didSet { needsDisplay = true } }
+  var onSelect: ((Int) -> Void)?
+  var onClose: ((Int) -> Void)?
+  var onDrop: ((TabView) -> Void)?
+
+  private var dragging = false
+  private var originX: CGFloat = 0
+  private var grabX: CGFloat = 0
+
+  private var closeRect: NSRect { NSRect(x: bounds.width - 22, y: 4, width: 20, height: 22) }
+
+  override func draw(_ dirtyRect: NSRect) {
+    (isActive ? woodCard : woodBg).setFill()
+    bounds.fill()
+    let para = NSMutableParagraphStyle()
+    para.lineBreakMode = .byTruncatingTail
+    let titleAttrs: [NSAttributedString.Key: Any] = [
+      .font: NSFont.systemFont(ofSize: 12), .foregroundColor: woodInk, .paragraphStyle: para,
+    ]
+    (title as NSString).draw(in: NSRect(x: 8, y: 7, width: bounds.width - 28, height: 16), withAttributes: titleAttrs)
+    let closeAttrs: [NSAttributedString.Key: Any] = [
+      .font: NSFont.systemFont(ofSize: 14), .foregroundColor: woodInk,
+    ]
+    ("×" as NSString).draw(at: NSPoint(x: bounds.width - 18, y: 5), withAttributes: closeAttrs)
+  }
+
+  override func mouseDown(with event: NSEvent) {
+    let p = convert(event.locationInWindow, from: nil)
+    if closeRect.contains(p) { onClose?(index); return }
+    onSelect?(index)
+    dragging = false
+    originX = frame.origin.x
+    grabX = event.locationInWindow.x
+  }
+
+  override func mouseDragged(with event: NSEvent) {
+    let dx = event.locationInWindow.x - grabX
+    if abs(dx) > 4 { dragging = true }
+    if dragging { frame.origin.x = originX + dx }
+  }
+
+  override func mouseUp(with event: NSEvent) {
+    if dragging { onDrop?(self) }
   }
 }
