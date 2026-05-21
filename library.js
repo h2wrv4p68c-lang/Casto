@@ -69,7 +69,7 @@ function buildTree(root) {
 
   function scan(dirPath, parentId, title) {
     const id = parentId === '-1' ? '0' : String(nextId++);
-    const node = { id, parentId, container: true, title, art: posterFor(dirPath, true), children: [] };
+    const node = { id, parentId, container: true, title, path: dirPath, art: posterFor(dirPath, true), children: [] };
     objects.set(id, node);
     let entries = [];
     try { entries = fs.readdirSync(dirPath, { withFileTypes: true }); } catch (_) { return node; }
@@ -240,10 +240,13 @@ function pageHTML(libraryName) {
   .folder .thumb{aspect-ratio:2/3;font-size:54px}
   .findbtn{position:absolute;top:6px;right:6px;border:0;background:rgba(47,65,86,.85);color:#fff;border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer;display:none}
   .castbtn{right:auto;left:6px}
+  .renbtn{top:auto;bottom:6px;right:6px}
   .card:hover .findbtn{display:block}
   .label{padding:10px 12px;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   button{font:inherit;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
   button.ghost{background:transparent;color:#f5e9cf;border:1px solid #f5e9cf}
+  .chip{font:inherit;border:1px solid #f5e9cf;background:transparent;color:#f5e9cf;border-radius:20px;padding:7px 14px;cursor:pointer;margin:3px}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
   select{font:inherit;padding:8px;border-radius:8px}
   /* find-poster split panel */
   #finder{display:none;position:fixed;right:0;top:62px;bottom:0;width:42%;background:var(--card);border-left:2px solid var(--accent);flex-direction:column;padding:18px;gap:12px;z-index:5}
@@ -283,9 +286,12 @@ function pageHTML(libraryName) {
     <button class="ghost" id="fsBtn">⛶ Fullscreen</button>
     <select id="fit"><option value="contain">Fit</option><option value="cover">Fill</option><option value="fill">Stretch</option></select>
     <span style="flex:1"></span>
-    <select id="devices"><option value="">Cast to TV…</option></select>
-    <button id="castBtn">Cast to TV</button>
     <button class="ghost" id="closeBtn">Close</button>
+  </div>
+  <div class="row" style="flex-wrap:wrap;justify-content:center">
+    <span style="color:#f5e9cf">Play on:</span>
+    <span id="playon" style="display:flex;flex-wrap:wrap"></span>
+    <button class="ghost" id="refreshTVs" title="Re-scan for TVs">⟳</button>
   </div>
   <div id="caststatus" style="color:#f5e9cf;font-size:13px;min-height:18px"></div>
 </div>
@@ -326,6 +332,10 @@ async function browse(id){
       card.ondragleave=()=> card.classList.remove('over');
       card.ondrop=(e)=>{ card.classList.remove('over'); handleDrop(e, it.id); };
     }
+    const ren=document.createElement('button');
+    ren.className='findbtn renbtn'; ren.textContent='✎'; ren.title='Rename';
+    ren.onclick=(e)=>{ e.stopPropagation(); rename(it); };
+    thumb.appendChild(ren);
     const label = document.createElement('div');
     label.className='label'; label.textContent = it.title;
     card.appendChild(thumb); card.appendChild(label);
@@ -356,6 +366,14 @@ function afterPoster(id){
   if(finderItem && finderItem.id===id) closeFinder();
 }
 
+async function rename(it){
+  const t = prompt('Rename', it.title);
+  if(t===null) return;
+  const title = t.trim(); if(!title) return;
+  await fetch('/api/rename?id='+encodeURIComponent(it.id)+'&title='+encodeURIComponent(title),{method:'POST'});
+  browse(current);
+}
+
 // --- Find-poster split panel -----------------------------------------------
 function openFinder(it){
   finderItem = it;
@@ -384,13 +402,13 @@ let playingId = null;
 function play(it){ open(it, true); }
 function open(it, watchLocal){
   playingId = it.id;
-  document.getElementById('ptitle').textContent = it.title + (watchLocal ? '' : ' — cast to a TV');
+  document.getElementById('ptitle').textContent = it.title;
   const v = document.getElementById('player');
   v.src = '/media/'+it.id;
   if(watchLocal){ v.play().catch(()=>{}); } else { v.pause(); }
-  document.getElementById('caststatus').textContent = watchLocal ? '' : 'Pick a TV, then Cast.';
+  document.getElementById('caststatus').textContent = '';
   document.getElementById('overlay').style.display='flex';
-  loadDevices();
+  renderPlayOn(watchLocal);
 }
 document.getElementById('fsBtn').onclick = () => {
   const v=document.getElementById('player');
@@ -400,22 +418,47 @@ document.getElementById('fsBtn').onclick = () => {
 document.getElementById('fit').onchange = (e) => {
   document.getElementById('player').style.objectFit = e.target.value;
 };
-async function loadDevices(){
-  const sel = document.getElementById('devices');
-  sel.innerHTML = '<option value="">Finding TVs…</option>';
-  const d = await (await fetch('/api/devices')).json();
-  sel.innerHTML = '<option value="">Cast to TV…</option>' +
-    d.devices.map(x=>'<option value="'+esc(x.name)+'">'+esc(x.name)+'</option>').join('');
+
+// One toggle chip per destination: "Here" (local) plus each detected TV.
+// Lit = playing there now. Independent — light as many as you like.
+function chip(label, on){
+  const b=document.createElement('button');
+  b.className='chip'+(on?' on':''); b.textContent=label;
+  return b;
 }
-document.getElementById('castBtn').onclick = async () => {
-  const target = document.getElementById('devices').value;
-  const st = document.getElementById('caststatus');
-  if(!target){ st.textContent='Pick a TV first.'; return; }
-  st.textContent='Casting…';
-  const d = await (await fetch('/api/cast?id='+encodeURIComponent(playingId)+'&target='+encodeURIComponent(target),{method:'POST'})).json();
-  // Independent of local playback: keep watching here, or pause — your call.
-  st.textContent = d.ok ? ('Casting to '+target+' — local playback is independent (pause it if you like)') : ('Failed: '+(d.error||'unknown'));
-};
+async function renderPlayOn(localOn){
+  const wrap=document.getElementById('playon'); wrap.innerHTML='';
+  const here=chip('▶ Here', localOn);
+  here.onclick=()=>{
+    const v=document.getElementById('player');
+    if(here.classList.contains('on')){ v.pause(); here.classList.remove('on'); }
+    else { v.play().catch(()=>{}); here.classList.add('on'); }
+  };
+  wrap.appendChild(here);
+  const status=document.getElementById('caststatus');
+  status.textContent='Finding TVs…';
+  let d; try{ d=await (await fetch('/api/devices')).json(); }catch(_){ d={devices:[]}; }
+  status.textContent = d.devices.length ? '' : 'No TVs found — check they’re on the same network.';
+  for(const tv of d.devices){
+    const c=chip('📺 '+tv.name, false);
+    c.onclick=()=>toggleTV(c, tv.name);
+    wrap.appendChild(c);
+  }
+}
+async function toggleTV(btn, name){
+  const st=document.getElementById('caststatus');
+  if(btn.classList.contains('on')){
+    btn.classList.remove('on'); st.textContent='Stopping '+name+'…';
+    const d=await (await fetch('/api/stop?target='+encodeURIComponent(name),{method:'POST'})).json();
+    st.textContent = d.ok ? ('Stopped '+name) : ('Failed: '+(d.error||''));
+  } else {
+    btn.classList.add('on'); st.textContent='Casting to '+name+'…';
+    const d=await (await fetch('/api/cast?id='+encodeURIComponent(playingId)+'&target='+encodeURIComponent(name),{method:'POST'})).json();
+    if(d.ok){ st.textContent='Playing on '+name; } else { btn.classList.remove('on'); st.textContent='Failed: '+(d.error||''); }
+  }
+}
+document.getElementById('refreshTVs').onclick = () =>
+  renderPlayOn(!document.getElementById('player').paused);
 document.getElementById('closeBtn').onclick = () => {
   const v=document.getElementById('player'); v.pause(); v.src='';
   document.getElementById('overlay').style.display='none';
@@ -454,7 +497,19 @@ async function main() {
   const count = [...objects.values()].filter((n) => !n.container).length;
   if (count === 0) { console.error('✗ No video files under ' + root); process.exit(1); }
 
+  // Custom display-title overrides, keyed by path relative to the library root.
+  const CONFIG = path.join(root, '.casto-library.json');
+  const config = { titles: {} };
+  try { Object.assign(config, JSON.parse(fs.readFileSync(CONFIG, 'utf8'))); } catch (_) {}
+  const relOf = (node) => path.relative(root, node.path || node.file);
+  for (const node of objects.values()) {
+    const t = config.titles[relOf(node)];
+    if (t) node.title = t;
+  }
+  const saveConfig = () => { try { fs.writeFileSync(CONFIG, JSON.stringify(config)); } catch (_) {} };
+
   let rendererCache = { at: 0, list: [] };
+  const castByDevice = new Map(); // tvName -> controlURL (active casts)
   const renderers = async () => {
     if (Date.now() - rendererCache.at < 60000 && rendererCache.list.length) return rendererCache.list;
     rendererCache = { at: Date.now(), list: await findRenderers() };
@@ -513,7 +568,32 @@ async function main() {
         if (!dev) return json(res, 404, { ok: false, error: 'no matching TV' });
         const url = `http://${host}:${port}/media/${node.id}`;
         await castTo(dev.controlURL, url, node.title, node.contentType);
+        castByDevice.set(dev.name, dev.controlURL);
         return json(res, 200, { ok: true, device: dev.name });
+      }
+
+      if (p === '/api/rename' && req.method === 'POST') {
+        const node = objects.get(u.searchParams.get('id') || '');
+        const title = (u.searchParams.get('title') || '').trim();
+        if (!node) return json(res, 404, { ok: false, error: 'item not found' });
+        if (!title) return json(res, 400, { ok: false, error: 'empty title' });
+        node.title = title;
+        config.titles[relOf(node)] = title;
+        saveConfig();
+        return json(res, 200, { ok: true, title });
+      }
+
+      if (p === '/api/stop' && req.method === 'POST') {
+        const target = u.searchParams.get('target') || '';
+        let controlURL = castByDevice.get(target);
+        if (!controlURL) {
+          const dev = (await renderers()).find((d) => d.name.toLowerCase().includes(target.toLowerCase()));
+          controlURL = dev && dev.controlURL;
+        }
+        if (!controlURL) return json(res, 404, { ok: false, error: 'no matching TV' });
+        await soap(controlURL, 'Stop', '<InstanceID>0</InstanceID>');
+        castByDevice.delete(target);
+        return json(res, 200, { ok: true });
       }
 
       if (p.startsWith('/media/')) {
