@@ -36,6 +36,7 @@ const CONTENT_TYPES = {
   '.avi': 'video/x-msvideo', '.mov': 'video/quicktime', '.webm': 'video/webm',
   '.mpg': 'video/mpeg', '.mpeg': 'video/mpeg', '.ts': 'video/mp2t', '.3gp': 'video/3gpp',
 };
+const VIDEO_EXTS = Object.keys(CONTENT_TYPES);
 
 function localIPv4() {
   const ifaces = os.networkInterfaces();
@@ -163,6 +164,10 @@ const transport = {
 };
 const hms = (s) => { s = Math.max(0, Math.floor(s)); const h = (s / 3600) | 0, m = ((s % 3600) / 60) | 0;
   return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+async function transportState(controlURL) {
+  const r = await soap(controlURL, 'GetTransportInfo', '<InstanceID>0</InstanceID>');
+  return (/<CurrentTransportState>([^<]*)<\/CurrentTransportState>/i.exec(r) || [])[1] || '';
+}
 async function seekRelative(controlURL, delta) {
   const info = await soap(controlURL, 'GetPositionInfo', '<InstanceID>0</InstanceID>');
   const t = (/<RelTime>([^<]*)<\/RelTime>/i.exec(info) || [])[1] || '0:00:00';
@@ -256,6 +261,7 @@ async function main() {
     console.log(
       'Casto cast daemon\n' +
       '  node castd.js [--port <n>] [--host <lan-ip>] [--bind <addr>]\n' +
+      '               [--library <folder>] [--autoplay]\n' +
       '  node castd.js --set-token <password>   set your own LAN password\n' +
       '  node castd.js --gen-token              generate a random one\n\n' +
       'Local (loopback) requests need no password. Remote requests require it\n' +
@@ -283,9 +289,71 @@ async function main() {
   const apiPort = parseInt(get('--port', '7700'), 10);
   const bind = get('--bind', '127.0.0.1');
   const token = loadToken();
+  const autoplayDefault = argv.includes('--autoplay');
+
+  // Optional media library: index a folder so the CLI can list/cast by name.
+  const libraryDir = get('--library', null);
+  const library = []; // { id, title, file }
+  if (libraryDir) {
+    const root = path.resolve(libraryDir);
+    let id = 1;
+    (function walk(dir) {
+      let entries = [];
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+      for (const e of entries) {
+        if (e.name.startsWith('.')) continue;
+        const fp = path.join(dir, e.name);
+        if (e.isDirectory()) walk(fp);
+        else if (VIDEO_EXTS.includes(path.extname(e.name).toLowerCase()))
+          library.push({ id: String(id++), title: path.basename(e.name, path.extname(e.name)), file: fp });
+      }
+    })(root);
+  }
+  const libById = new Map(library.map((m) => [m.id, m]));
+  const libByName = (name) =>
+    library.find((m) => m.title.toLowerCase().includes(String(name).toLowerCase()));
 
   const media = await createMediaServer(host);
-  const sessions = new Map(); // sessionId -> { device, controlURL, src, url }
+  const sessions = new Map();        // sessionId -> { device, controlURL, src, url }
+  const queues = new Map();          // tvName -> [ { src, title } ]
+  const autoplayOn = new Map();      // tvName -> bool
+  const currentByDevice = new Map(); // tvName -> { controlURL }
+  const lastState = new Map();       // tvName -> last TransportState seen
+  const queueFor = (tv) => { if (!queues.has(tv)) queues.set(tv, []); return queues.get(tv); };
+
+  // Turn a src (library id, library name, local path, or URL) into a playable
+  // URL + metadata. Local files are registered on the shared media server.
+  const resolveSource = (raw) => {
+    let src = raw;
+    const lib = libById.get(raw) || libByName(raw);
+    if (lib) src = lib.file;
+    if (isRemote(src)) {
+      return {
+        url: src, src,
+        contentType: CONTENT_TYPES[path.extname(new URL(src).pathname).toLowerCase()] || 'video/mp4',
+        title: lib ? lib.title : (path.basename(new URL(src).pathname) || 'Stream'),
+      };
+    }
+    const p = path.resolve(src);
+    if (!fs.existsSync(p)) throw new Error('file not found: ' + src);
+    const reg = media.register(p);
+    return { url: reg.url, src: p, contentType: reg.contentType, title: lib ? lib.title : path.basename(p) };
+  };
+
+  // Play the next queued item on a TV (used by /queue/next and autoplay).
+  const playNext = async (tv) => {
+    const q = queueFor(tv);
+    const cur = currentByDevice.get(tv);
+    if (!q.length || !cur) return null;
+    const item = q.shift();
+    const r = resolveSource(item.src);
+    await castTo(cur.controlURL, r.url, r.title, r.contentType);
+    lastState.set(tv, 'PLAYING');
+    const session = crypto.randomBytes(4).toString('hex');
+    sessions.set(session, { device: tv, controlURL: cur.controlURL, src: r.src, url: r.url });
+    return { session, title: r.title };
+  };
+
   let cache = { at: 0, list: [] };
   const renderers = async () => {
     if (Date.now() - cache.at < 60000 && cache.list.length) return cache.list;
@@ -319,25 +387,60 @@ async function main() {
         return json(res, 200, { ok: true, sessions: [...sessions.entries()].map(([id, s]) =>
           ({ session: id, device: s.device, src: s.src })) });
       }
+      if (u.pathname === '/library') {
+        return json(res, 200, { ok: true, movies: library.map((m) => ({ id: m.id, title: m.title })) });
+      }
       if (u.pathname === '/cast') {
         const dev = pick(await renderers(), q.target);
         if (!dev) return json(res, 404, { ok: false, error: 'no matching device' });
-        if (!q.src) return json(res, 400, { ok: false, error: 'missing src' });
-        let url, contentType, title;
-        if (isRemote(q.src)) {
-          url = q.src;
-          contentType = CONTENT_TYPES[path.extname(new URL(q.src).pathname).toLowerCase()] || 'video/mp4';
-          title = path.basename(new URL(q.src).pathname) || 'Stream';
-        } else {
-          const p = path.resolve(q.src);
-          if (!fs.existsSync(p)) return json(res, 404, { ok: false, error: 'file not found' });
-          const reg = media.register(p);
-          url = reg.url; contentType = reg.contentType; title = path.basename(p);
-        }
-        await castTo(dev.controlURL, url, title, contentType);
+        const raw = q.src || q.id || q.name;
+        if (!raw) return json(res, 400, { ok: false, error: 'missing src/id/name' });
+        const r = resolveSource(raw);
+        await castTo(dev.controlURL, r.url, r.title, r.contentType);
+        const key = q.target || dev.name; // track under the name the caller used
         const session = crypto.randomBytes(4).toString('hex');
-        sessions.set(session, { device: dev.name, controlURL: dev.controlURL, src: q.src, url });
-        return json(res, 200, { ok: true, session, device: dev.name, url });
+        sessions.set(session, { device: dev.name, controlURL: dev.controlURL, src: r.src, url: r.url });
+        currentByDevice.set(key, { controlURL: dev.controlURL });
+        lastState.set(key, 'PLAYING');
+        if (!autoplayOn.has(key)) autoplayOn.set(key, autoplayDefault);
+        return json(res, 200, { ok: true, session, device: dev.name, title: r.title, url: r.url });
+      }
+      if (u.pathname === '/queue') {
+        const tv = q.tv;
+        if (tv) return json(res, 200, { ok: true, tv, autoplay: !!autoplayOn.get(tv), queue: queueFor(tv) });
+        return json(res, 200, { ok: true, queues: [...queues.entries()].map(([t, items]) =>
+          ({ tv: t, autoplay: !!autoplayOn.get(t), count: items.length })) });
+      }
+      if (u.pathname === '/queue/add') {
+        const tv = q.tv;
+        if (!tv) return json(res, 400, { ok: false, error: 'missing tv' });
+        const raw = q.src || q.id || q.name;
+        if (!raw) return json(res, 400, { ok: false, error: 'missing src/id/name' });
+        const lib = libById.get(raw) || libByName(raw);
+        queueFor(tv).push({ src: raw, title: lib ? lib.title : raw });
+        return json(res, 200, { ok: true, tv, queued: queueFor(tv).length });
+      }
+      if (u.pathname === '/queue/clear') {
+        if (!q.tv) return json(res, 400, { ok: false, error: 'missing tv' });
+        queues.set(q.tv, []);
+        return json(res, 200, { ok: true });
+      }
+      if (u.pathname === '/queue/next') {
+        if (!q.tv) return json(res, 400, { ok: false, error: 'missing tv' });
+        // Auto-resolve the matching TV if we haven't cast to it yet.
+        if (!currentByDevice.get(q.tv)) {
+          const dev = pick(await renderers(), q.tv);
+          if (!dev) return json(res, 404, { ok: false, error: 'no matching TV' });
+          currentByDevice.set(q.tv, { controlURL: dev.controlURL });
+        }
+        const r = await playNext(q.tv);
+        if (!r) return json(res, 404, { ok: false, error: 'nothing queued for that TV' });
+        return json(res, 200, { ok: true, ...r });
+      }
+      if (u.pathname === '/autoplay') {
+        if (!q.tv) return json(res, 400, { ok: false, error: 'missing tv' });
+        autoplayOn.set(q.tv, q.on === 'true');
+        return json(res, 200, { ok: true, tv: q.tv, autoplay: !!autoplayOn.get(q.tv) });
       }
       if (u.pathname === '/control') {
         const s = sessions.get(q.session);
@@ -357,10 +460,29 @@ async function main() {
     }
   });
 
+  // Autoplay: when a TV with autoplay finishes a track, play the next queued.
+  setInterval(async () => {
+    for (const [tv, items] of queues) {
+      if (!autoplayOn.get(tv) || items.length === 0) continue;
+      const cur = currentByDevice.get(tv);
+      if (!cur) continue;
+      try {
+        const st = await transportState(cur.controlURL);
+        const prev = lastState.get(tv);
+        lastState.set(tv, st);
+        if ((st === 'STOPPED' || st === 'NO_MEDIA_PRESENT') && prev === 'PLAYING') {
+          await playNext(tv);
+        }
+      } catch (_) {}
+    }
+  }, 5000);
+
   api.listen(apiPort, bind, () => {
     console.log(`▶ Casto cast daemon`);
     console.log(`  control API → http://${bind}:${apiPort}`);
     console.log(`  media host  → ${host}`);
+    console.log(`  library     → ${library.length ? library.length + ' movies' : 'none (pass --library <folder>)'}`);
+    console.log(`  autoplay    → ${autoplayDefault ? 'on by default' : 'off (per-TV via /autoplay)'}`);
     if (bind === '127.0.0.1') {
       console.log(`  reach       → local only (run --bind 0.0.0.0 to allow a remote master)`);
     } else {

@@ -44,13 +44,28 @@ function api(method, pathQ) {
 
 function arg(flag) { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : undefined; }
 
+// A URL stays a URL; an existing path becomes an absolute src; anything else
+// is treated as a library movie name for the daemon to resolve.
+function srcParam(src) {
+  if (/^https?:\/\//i.test(src)) return 'src=' + encodeURIComponent(src);
+  const abs = path.resolve(src);
+  if (fs.existsSync(abs)) return 'src=' + encodeURIComponent(abs);
+  return 'name=' + encodeURIComponent(src);
+}
+
 function usage() {
   console.log(
     'casto-ctl — drive the Casto cast daemon\n\n' +
-    '  casto-ctl devices                        list TVs\n' +
-    '  casto-ctl sessions                       list active streams\n' +
-    '  casto-ctl cast <file|url> [--tv <name>]  start a stream on a TV\n' +
-    '  casto-ctl play|pause|stop|forward|back [--session <id>]\n\n' +
+    '  casto-ctl list                            list library movies\n' +
+    '  casto-ctl devices                         list TVs\n' +
+    '  casto-ctl cast <movie|file|url> [--tv <name>]  play on a TV\n' +
+    '  casto-ctl play|pause|stop|forward|back [--session <id>]\n' +
+    '  casto-ctl queue [--tv <name>]             show the queue\n' +
+    '  casto-ctl queue add <movie|file|url> --tv <name>\n' +
+    '  casto-ctl queue clear --tv <name>\n' +
+    '  casto-ctl next --tv <name>                play next queued\n' +
+    '  casto-ctl autoplay on|off --tv <name>\n' +
+    '  casto-ctl sessions                        list active streams\n\n' +
     `daemon: ${BASE}   ${TOKEN ? '(token loaded)' : '(no token — local only)'}`);
 }
 
@@ -79,12 +94,35 @@ async function main() {
   try {
     if (cmd === 'devices') return report(await api('GET', '/devices'));
     if (cmd === 'sessions') return report(await api('GET', '/sessions'));
+    if (cmd === 'list') return report(await api('GET', '/library'));
     if (cmd === 'cast') {
       const src = process.argv[3];
-      if (!src || src.startsWith('-')) throw new Error('usage: casto-ctl cast <file|url> [--tv <name>]');
-      const send = /^https?:\/\//i.test(src) ? src : path.resolve(src);
+      if (!src || src.startsWith('-')) throw new Error('usage: casto-ctl cast <movie|file|url> [--tv <name>]');
       const tv = arg('--tv');
-      return report(await api('POST', `/cast?src=${encodeURIComponent(send)}` + (tv ? `&target=${encodeURIComponent(tv)}` : '')));
+      return report(await api('POST', `/cast?${srcParam(src)}` + (tv ? `&target=${encodeURIComponent(tv)}` : '')));
+    }
+    if (cmd === 'next') {
+      const tv = arg('--tv'); if (!tv) throw new Error('usage: casto-ctl next --tv <name>');
+      return report(await api('POST', `/queue/next?tv=${encodeURIComponent(tv)}`));
+    }
+    if (cmd === 'autoplay') {
+      const on = process.argv[3], tv = arg('--tv');
+      if (!['on', 'off'].includes(on) || !tv) throw new Error('usage: casto-ctl autoplay on|off --tv <name>');
+      return report(await api('POST', `/autoplay?tv=${encodeURIComponent(tv)}&on=${on === 'on'}`));
+    }
+    if (cmd === 'queue') {
+      const sub = process.argv[3];
+      const tv = arg('--tv');
+      if (sub === 'add') {
+        const src = process.argv[4];
+        if (!src || !tv) throw new Error('usage: casto-ctl queue add <movie|file|url> --tv <name>');
+        return report(await api('POST', `/queue/add?tv=${encodeURIComponent(tv)}&${srcParam(src)}`));
+      }
+      if (sub === 'clear') {
+        if (!tv) throw new Error('usage: casto-ctl queue clear --tv <name>');
+        return report(await api('POST', `/queue/clear?tv=${encodeURIComponent(tv)}`));
+      }
+      return report(await api('GET', '/queue' + (tv ? `?tv=${encodeURIComponent(tv)}` : '')));
     }
     if (['play', 'pause', 'stop', 'forward', 'back'].includes(cmd)) {
       const session = arg('--session') || (await pickSession());
