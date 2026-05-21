@@ -497,8 +497,8 @@ async function main() {
 
   if (args.help || (!args.file && !args.browse)) {
     console.log(
-      'Casto — cast a local video to a DLNA TV\n\n' +
-        '  node casto.js <video-file|folder> [options]\n\n' +
+      'Casto — cast a local video or remote URL to a DLNA TV\n\n' +
+        '  node casto.js <video-file|folder|http-url> [options]\n\n' +
         'Options:\n' +
         '  --device <name>   match only renderers whose name contains <name>\n' +
         '  --host <lan-ip>   force the LAN IP advertised to the TV\n' +
@@ -512,10 +512,14 @@ async function main() {
     process.exit(args.help ? 0 : 1);
   }
 
-  // Resolve which video to cast: explicit folder/--browse → interactive pick,
-  // a directory path → pick, otherwise a plain file.
+  // A remote http(s) URL is cast straight to the TV (no local server); a
+  // local path is resolved (folder/--browse → interactive pick) and served.
+  const isRemote = !!args.file && /^https?:\/\//i.test(args.file);
+
   let file;
-  if (args.browse) {
+  if (isRemote) {
+    file = args.file;
+  } else if (args.browse) {
     file = await pickFromDir(args.browse);
   } else {
     file = path.resolve(args.file);
@@ -524,14 +528,18 @@ async function main() {
     else if (!fs.statSync(file).isFile()) die(`Not a file: ${file}`);
   }
 
-  const ext = path.extname(file).toLowerCase();
+  const ext = isRemote
+    ? path.extname(new URL(file).pathname).toLowerCase()
+    : path.extname(file).toLowerCase();
   const contentType = CONTENT_TYPES[ext] || 'video/mp4';
-  const title = path.basename(file, ext);
+  const title = isRemote
+    ? path.basename(new URL(file).pathname) || 'Stream'
+    : path.basename(file, ext);
 
-  // Subtitle resolution: explicit --sub wins, then sidecar auto-detect,
-  // unless --no-subs turns the whole thing off.
+  // Subtitle resolution (local files only): explicit --sub wins, then sidecar
+  // auto-detect, unless --no-subs turns the whole thing off.
   let subFile = null;
-  if (!args.noSubs) {
+  if (!args.noSubs && !isRemote) {
     if (args.sub) {
       subFile = path.resolve(args.sub);
       if (!fs.existsSync(subFile)) die(`Subtitle not found: ${subFile}`);
@@ -541,7 +549,7 @@ async function main() {
   }
 
   const host = args.host || localIPv4();
-  if (!host) die('Could not determine your LAN IP. Pass one with --host.');
+  if (!host && !isRemote) die('Could not determine your LAN IP. Pass one with --host.');
 
   console.log('⊙ Searching for DLNA devices…');
   let renderers = await findRenderers();
@@ -568,59 +576,67 @@ async function main() {
     target = renderers[idx];
   }
 
-  // Build the served resources and their URLs.
-  const videoPath = '/' + encodeURIComponent(path.basename(file));
-  const resources = { [decodeURIComponent(videoPath)]: { file, contentType } };
-
-  // Decide which subtitle formats to advertise. For an SRT source we can also
-  // synthesize an SMI so the TV has a fallback to pick from; --sub-format
-  // controls whether we offer srt, smi, or both.
+  // What we cast: a remote URL goes to the TV directly; a local file is served
+  // over our HTTP server (with subtitles) and that served URL is cast.
+  let server = null;
+  let url;
+  let subs = [];
   let tmpSmi = null;
-  const subEntries = []; // { file, type, contentType }
-  if (subFile) {
-    const subExt = path.extname(subFile).toLowerCase();
-    const fmt = args.subFormat;
-    if (subExt === '.srt') {
-      if (fmt === 'srt' || fmt === 'both') {
-        subEntries.push({ file: subFile, type: 'srt', contentType: SUBTITLE_TYPES['.srt'] });
+
+  if (isRemote) {
+    url = file;
+  } else {
+    const videoPath = '/' + encodeURIComponent(path.basename(file));
+    const resources = { [decodeURIComponent(videoPath)]: { file, contentType } };
+
+    // For an SRT source we can also synthesize an SMI so the TV has a fallback
+    // format to pick from; --sub-format controls srt | smi | both.
+    const subEntries = []; // { file, type, contentType }
+    if (subFile) {
+      const subExt = path.extname(subFile).toLowerCase();
+      const fmt = args.subFormat;
+      if (subExt === '.srt') {
+        if (fmt === 'srt' || fmt === 'both') {
+          subEntries.push({ file: subFile, type: 'srt', contentType: SUBTITLE_TYPES['.srt'] });
+        }
+        if (fmt === 'smi' || fmt === 'both') {
+          tmpSmi = path.join(os.tmpdir(), `casto-${Date.now()}-${title}.smi`);
+          fs.writeFileSync(tmpSmi, srtToSami(fs.readFileSync(subFile, 'utf8'), title));
+          subEntries.push({ file: tmpSmi, type: 'smi', contentType: SUBTITLE_TYPES['.smi'] });
+        }
+      } else {
+        // Only SRT can be auto-converted; anything else is served as-is.
+        subEntries.push({
+          file: subFile,
+          type: subExt.slice(1),
+          contentType: SUBTITLE_TYPES[subExt] || 'text/plain',
+        });
+        if (fmt === 'smi' && subExt !== '.smi') {
+          console.log('  (note: SMI auto-build only supports SRT input; serving original)');
+        }
       }
-      if (fmt === 'smi' || fmt === 'both') {
-        tmpSmi = path.join(os.tmpdir(), `casto-${Date.now()}-${title}.smi`);
-        fs.writeFileSync(tmpSmi, srtToSami(fs.readFileSync(subFile, 'utf8'), title));
-        subEntries.push({ file: tmpSmi, type: 'smi', contentType: SUBTITLE_TYPES['.smi'] });
-      }
-    } else {
-      // Only SRT can be auto-converted; anything else is served as-is.
-      subEntries.push({
-        file: subFile,
-        type: subExt.slice(1),
-        contentType: SUBTITLE_TYPES[subExt] || 'text/plain',
-      });
-      if (fmt === 'smi' && subExt !== '.smi') {
-        console.log('  (note: SMI auto-build only supports SRT input; serving original)');
-      }
+    }
+
+    for (const e of subEntries) {
+      const niceName = `${title}.${e.type}`; // e.g. Movie.srt / Movie.smi
+      const subPath = '/' + encodeURIComponent(niceName);
+      resources[decodeURIComponent(subPath)] = { file: e.file, contentType: e.contentType };
+      subs.push({ path: subPath, type: e.type, contentType: e.contentType });
+    }
+
+    const started = await startServer(resources, host);
+    server = started.server;
+    const base = `http://${host}:${started.port}`;
+    url = base + videoPath;
+    for (const s of subs) s.url = base + s.path;
+    if (subs.length) {
+      // Header can only name one; point at the first advertised track.
+      resources[decodeURIComponent(videoPath)].captionUrl = subs[0].url;
     }
   }
 
-  const subs = [];
-  for (const e of subEntries) {
-    const niceName = `${title}.${e.type}`; // e.g. Movie.srt / Movie.smi
-    const subPath = '/' + encodeURIComponent(niceName);
-    resources[decodeURIComponent(subPath)] = { file: e.file, contentType: e.contentType };
-    subs.push({ path: subPath, type: e.type, contentType: e.contentType });
-  }
-
-  const { server, port } = await startServer(resources, host);
-  const base = `http://${host}:${port}`;
-  const url = base + videoPath;
-  for (const s of subs) s.url = base + s.path;
-  if (subs.length) {
-    // Header can only name one; point at the first advertised track.
-    resources[decodeURIComponent(videoPath)].captionUrl = subs[0].url;
-  }
-
   console.log(`▶ Casting "${title}" → ${target.name}`);
-  console.log(`  serving ${url}`);
+  console.log(`  ${isRemote ? 'source  ' + url : 'serving ' + url}`);
   console.log(
     `  subtitles: ${subs.length ? subs.map((s) => s.type).join(' + ') : 'off'}` +
       (tmpSmi ? ' (SMI auto-built from SRT)' : '')
@@ -629,7 +645,7 @@ async function main() {
   try {
     await cast(target.controlURL, url, title, contentType, subs);
   } catch (e) {
-    server.close();
+    if (server) server.close();
     if (tmpSmi) fs.unlinkSync(tmpSmi);
     die('Failed to start playback: ' + e.message);
   }
@@ -641,7 +657,7 @@ async function main() {
     try {
       if (stopTv) await transport.stop(target.controlURL);
     } catch (_) {}
-    server.close();
+    if (server) server.close();
     if (tmpSmi) {
       try {
         fs.unlinkSync(tmpSmi);
