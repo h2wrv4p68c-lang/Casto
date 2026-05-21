@@ -15,11 +15,14 @@ The "fling one file to the TV" tool.
   per renderer, control API — different streams on different TVs at once
   (DLNA = no frame-sync across rooms)
 
-## M1 — Library server ✅
-Browse a whole folder from the TV.
-- ✅ UPnP MediaServer: SSDP advertise, ContentDirectory `Browse`, ConnectionManager
-- ✅ Folder → container/item tree, Range streaming, sidecar poster art
+## M1 — Library ✅
+Browse a whole folder, with posters — the Plex-style aspect.
+- ✅ UPnP MediaServer (`server.js`): browse from the TV directly
+- ✅ Library web app (`library.js`): poster-grid UI (wood theme), folder nav,
+  inline play, and Cast-to-TV per item; works in any browser / Casto Browser
+- ✅ Folder → tree, Range streaming, sidecar poster art
 - ⬜ Lazy indexing for very large / external-drive libraries
+- ⬜ Metadata/poster fetch (e.g. TMDb) for files without sidecar art
 - ⬜ NAS guidance (or run the existing NAS DLNA server instead)
 
 ## M2 — macOS menu-bar app ✅ (build-unverified)
@@ -39,7 +42,8 @@ Lightweight, API-driven, embeddable browser on system WebKit.
 - ✅ Cast hook: extract page `<video>` src → casto.js (now accepts URLs)
 - ✅ `casto://` deep-link transport (AppleEvent + Info.plist; registers on build/install)
 - ✅ Packaging: build-app.sh (bundles casto.js + Node, sign/notarize)
-- ⬜ Tabs / multiple windows
+- ✅ Library hook: open the Casto Library web app inside the browser
+- 🟡 Tabs / multiple windows (next)
 - ⬜ Library hook (browse, queue, "cast from library")
 - ⬜ Embeddable `CastoWebView` for other Swift apps to drop in
 - ⬜ Reader mode / simplicity features (the Min-inspired bits)
