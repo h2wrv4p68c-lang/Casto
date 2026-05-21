@@ -239,6 +239,7 @@ function pageHTML(libraryName) {
   .thumb img{width:100%;height:100%;object-fit:cover;display:block}
   .folder .thumb{aspect-ratio:2/3;font-size:54px}
   .findbtn{position:absolute;top:6px;right:6px;border:0;background:rgba(47,65,86,.85);color:#fff;border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer;display:none}
+  .castbtn{right:auto;left:6px}
   .card:hover .findbtn{display:block}
   .label{padding:10px 12px;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   button{font:inherit;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
@@ -277,10 +278,13 @@ function pageHTML(libraryName) {
 
 <div id="overlay">
   <div id="ptitle"></div>
-  <video id="player" controls></video>
+  <video id="player" controls style="object-fit:contain"></video>
   <div class="row">
+    <button class="ghost" id="fsBtn">⛶ Fullscreen</button>
+    <select id="fit"><option value="contain">Fit</option><option value="cover">Fill</option><option value="fill">Stretch</option></select>
+    <span style="flex:1"></span>
     <select id="devices"><option value="">Cast to TV…</option></select>
-    <button id="castBtn">Cast</button>
+    <button id="castBtn">Cast to TV</button>
     <button class="ghost" id="closeBtn">Close</button>
   </div>
   <div id="caststatus" style="color:#f5e9cf;font-size:13px;min-height:18px"></div>
@@ -310,6 +314,10 @@ async function browse(id){
       thumb.appendChild(img);
     } else { thumb.textContent = fallback; }
     if(it.type==='video'){
+      const cast=document.createElement('button');
+      cast.className='findbtn castbtn'; cast.textContent='📺 cast'; cast.title='Cast to a TV (no local playback)';
+      cast.onclick=(e)=>{ e.stopPropagation(); open(it, false); };
+      thumb.appendChild(cast);
       const find=document.createElement('button');
       find.className='findbtn'; find.textContent='🔍 poster'; find.title='Find a poster';
       find.onclick=(e)=>{ e.stopPropagation(); openFinder(it); };
@@ -371,17 +379,27 @@ document.getElementById('finderClose').onclick=closeFinder;
   dz.ondrop=(e)=>{ dz.classList.remove('over'); if(finderItem) handleDrop(e, finderItem.id); };
 })();
 
-// --- Inline player + cast --------------------------------------------------
+// --- Inline player + cast (independent — casting is not a mirror) -----------
 let playingId = null;
-function play(it){
+function play(it){ open(it, true); }
+function open(it, watchLocal){
   playingId = it.id;
-  document.getElementById('ptitle').textContent = it.title;
+  document.getElementById('ptitle').textContent = it.title + (watchLocal ? '' : ' — cast to a TV');
   const v = document.getElementById('player');
-  v.src = '/media/'+it.id; v.play().catch(()=>{});
-  document.getElementById('caststatus').textContent='';
+  v.src = '/media/'+it.id;
+  if(watchLocal){ v.play().catch(()=>{}); } else { v.pause(); }
+  document.getElementById('caststatus').textContent = watchLocal ? '' : 'Pick a TV, then Cast.';
   document.getElementById('overlay').style.display='flex';
   loadDevices();
 }
+document.getElementById('fsBtn').onclick = () => {
+  const v=document.getElementById('player');
+  if(document.fullscreenElement) document.exitFullscreen();
+  else if(v.requestFullscreen) v.requestFullscreen();
+};
+document.getElementById('fit').onchange = (e) => {
+  document.getElementById('player').style.objectFit = e.target.value;
+};
 async function loadDevices(){
   const sel = document.getElementById('devices');
   sel.innerHTML = '<option value="">Finding TVs…</option>';
@@ -395,7 +413,8 @@ document.getElementById('castBtn').onclick = async () => {
   if(!target){ st.textContent='Pick a TV first.'; return; }
   st.textContent='Casting…';
   const d = await (await fetch('/api/cast?id='+encodeURIComponent(playingId)+'&target='+encodeURIComponent(target),{method:'POST'})).json();
-  st.textContent = d.ok ? ('Casting to '+target) : ('Failed: '+(d.error||'unknown'));
+  if(d.ok){ document.getElementById('player').pause(); } // don't mirror on the TV
+  st.textContent = d.ok ? ('Casting to '+target+' (local playback paused)') : ('Failed: '+(d.error||'unknown'));
 };
 document.getElementById('closeBtn').onclick = () => {
   const v=document.getElementById('player'); v.pause(); v.src='';
