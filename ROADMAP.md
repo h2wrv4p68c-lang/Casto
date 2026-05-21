@@ -13,7 +13,9 @@ The "fling one file to the TV" tool.
 - ✅ Remote `http(s)` URL casting (no local server)
 - ✅ Multi-TV cast daemon (`castd.js`): one shared media server, a session
   per renderer, control API — different streams on different TVs at once
-  (DLNA = no frame-sync across rooms)
+- ✅ Admin CLI (`casto-ctl`): cast/play/pause/stop/forward/back/devices.
+  Local needs nothing; a remote "master" is gated by a LAN password you set
+  once (`castd.js --set-token <pw>` or `--gen-token`), no third party
 
 ## M1 — Library ✅
 Browse a whole folder, with posters — the Plex-style aspect.

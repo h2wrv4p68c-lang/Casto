@@ -241,16 +241,48 @@ function createMediaServer(host) {
 
 // --- Daemon ----------------------------------------------------------------
 
+const TOKEN_FILE = path.join(os.homedir(), '.casto', 'token');
+function loadToken() {
+  if (process.env.CASTO_TOKEN) return process.env.CASTO_TOKEN;
+  try { return fs.readFileSync(TOKEN_FILE, 'utf8').trim() || null; } catch (_) { return null; }
+}
+const isLoopback = (addr) =>
+  addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+
 async function main() {
   const argv = process.argv.slice(2);
   const get = (flag, def) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : def; };
   if (argv.includes('-h') || argv.includes('--help')) {
-    console.log('Casto cast daemon\n  node castd.js [--port <n>] [--host <lan-ip>]');
+    console.log(
+      'Casto cast daemon\n' +
+      '  node castd.js [--port <n>] [--host <lan-ip>] [--bind <addr>]\n' +
+      '  node castd.js --set-token <password>   set your own LAN password\n' +
+      '  node castd.js --gen-token              generate a random one\n\n' +
+      'Local (loopback) requests need no password. Remote requests require it\n' +
+      'in an X-Casto-Token header; start with --bind 0.0.0.0 to allow them.');
+    return;
+  }
+  // Set/persist the LAN password (shared secret) for remote control. Set once.
+  const setIdx = argv.indexOf('--set-token');
+  if (setIdx >= 0 || argv.includes('--gen-token')) {
+    const chosen = setIdx >= 0 ? argv[setIdx + 1] : null;
+    if (setIdx >= 0 && (!chosen || chosen.startsWith('--'))) {
+      console.error('✗ usage: --set-token <password>');
+      process.exit(1);
+    }
+    const t = chosen || crypto.randomBytes(24).toString('hex');
+    fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true });
+    fs.writeFileSync(TOKEN_FILE, t, { mode: 0o600 });
+    console.log(`LAN password saved to ${TOKEN_FILE}.`);
+    if (!chosen) console.log(`Password: ${t}`);
+    console.log('Copy it to the controlling machine (CASTO_TOKEN env or its own ~/.casto/token).');
     return;
   }
   const host = get('--host', localIPv4());
   if (!host) { console.error('✗ Could not determine LAN IP; pass --host.'); process.exit(1); }
   const apiPort = parseInt(get('--port', '7700'), 10);
+  const bind = get('--bind', '127.0.0.1');
+  const token = loadToken();
 
   const media = await createMediaServer(host);
   const sessions = new Map(); // sessionId -> { device, controlURL, src, url }
@@ -272,6 +304,12 @@ async function main() {
   const api = http.createServer(async (req, res) => {
     const u = new URL(req.url, `http://${host}`);
     const q = Object.fromEntries(u.searchParams);
+    // Loopback is trusted; off-machine requests must carry the shared token.
+    if (!isLoopback(req.socket.remoteAddress || '')) {
+      if (!token || req.headers['x-casto-token'] !== token) {
+        return json(res, 401, { ok: false, error: 'unauthorized (remote control needs a valid X-Casto-Token)' });
+      }
+    }
     try {
       if (u.pathname === '/devices') {
         const list = await renderers();
@@ -319,11 +357,15 @@ async function main() {
     }
   });
 
-  api.listen(apiPort, '127.0.0.1', () => {
+  api.listen(apiPort, bind, () => {
     console.log(`▶ Casto cast daemon`);
-    console.log(`  control API → http://127.0.0.1:${apiPort}`);
+    console.log(`  control API → http://${bind}:${apiPort}`);
     console.log(`  media host  → ${host}`);
-    console.log(`  multiple TVs = multiple concurrent /cast sessions (not frame-synced)`);
+    if (bind === '127.0.0.1') {
+      console.log(`  reach       → local only (run --bind 0.0.0.0 to allow a remote master)`);
+    } else {
+      console.log(`  reach       → remote allowed; ${token ? 'token auth ON' : '⚠ NO TOKEN — remote calls will be rejected (run --gen-token)'}`);
+    }
   });
 }
 

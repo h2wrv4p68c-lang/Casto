@@ -4,13 +4,15 @@
   "description": "Lightweight DLNA caster — stream local video files to a DLNA TV",
   "bin": {
     "casto": "casto.js",
-    "casto-serve": "server.js"
+    "casto-serve": "server.js",
+    "casto-ctl": "casto-ctl.js"
   },
   "scripts": {
     "start": "node casto.js",
     "serve": "node server.js",
     "library": "node library.js",
     "castd": "node castd.js",
+    "ctl": "node casto-ctl.js",
     "menubar": "swift menubar.swift"
   },
   "license": "MIT"
