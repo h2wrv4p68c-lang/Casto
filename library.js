@@ -413,8 +413,8 @@ document.getElementById('castBtn').onclick = async () => {
   if(!target){ st.textContent='Pick a TV first.'; return; }
   st.textContent='Casting…';
   const d = await (await fetch('/api/cast?id='+encodeURIComponent(playingId)+'&target='+encodeURIComponent(target),{method:'POST'})).json();
-  if(d.ok){ document.getElementById('player').pause(); } // don't mirror on the TV
-  st.textContent = d.ok ? ('Casting to '+target+' (local playback paused)') : ('Failed: '+(d.error||'unknown'));
+  // Independent of local playback: keep watching here, or pause — your call.
+  st.textContent = d.ok ? ('Casting to '+target+' — local playback is independent (pause it if you like)') : ('Failed: '+(d.error||'unknown'));
 };
 document.getElementById('closeBtn').onclick = () => {
   const v=document.getElementById('player'); v.pause(); v.src='';

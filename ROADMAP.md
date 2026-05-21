@@ -25,8 +25,9 @@ Browse a whole folder, with posters — the Plex-style aspect.
 - ✅ Folder → tree, Range streaming, sidecar poster art
 - ✅ Set posters by drag-and-drop (desktop file or dragged web image); split
   "Find poster" panel that opens an image search to drag from — no API/key
-- ✅ In-browser player: watch locally with fullscreen + Fit/Fill/Stretch, OR
-  cast to a TV from the card — independent (casting pauses local, not a mirror)
+- ✅ In-browser player: watch locally with fullscreen + Fit/Fill/Stretch, and/or
+  cast to a TV — fully independent (cast-only via the card 📺 button, or watch
+  here + cast at the same time if you want; nothing is forced)
 - ⬜ Lazy indexing for very large / external-drive libraries
 - ⬜ NAS guidance (or run the existing NAS DLNA server instead)
 
