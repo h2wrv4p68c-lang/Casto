@@ -21,10 +21,8 @@ Browse a whole folder, with posters — the Plex-style aspect.
 - ✅ Library web app (`library.js`): poster-grid UI (wood theme), folder nav,
   inline play, and Cast-to-TV per item; works in any browser / Casto Browser
 - ✅ Folder → tree, Range streaming, sidecar poster art
-- ✅ TMDb poster fetch for files without sidecar art (set `TMDB_API_KEY`)
-- ✅ Online-posters on/off toggle (persisted to .casto-library.json)
 - ✅ Set posters by drag-and-drop (desktop file or dragged web image); split
-  "Find poster" panel that opens an image search to drag from — no key needed
+  "Find poster" panel that opens an image search to drag from — no API/key
 - ⬜ Lazy indexing for very large / external-drive libraries
 - ⬜ NAS guidance (or run the existing NAS DLNA server instead)
 

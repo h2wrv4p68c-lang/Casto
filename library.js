@@ -18,9 +18,6 @@ const path = require('path');
 const dgram = require('dgram');
 const { URL } = require('url');
 
-// Optional: set TMDB_API_KEY to auto-fetch posters for files without sidecar art.
-const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
-
 const AVT = 'urn:schemas-upnp-org:service:AVTransport:1';
 const SSDP_ADDR = '239.255.255.250';
 const SSDP_PORT = 1900;
@@ -98,43 +95,6 @@ function buildTree(root) {
   }
   scan(root, '-1', path.basename(root) || 'Library');
   return objects;
-}
-
-// --- TMDb poster lookup (optional) -----------------------------------------
-
-const posterCache = new Map(); // node.id -> url | null
-
-function cleanTitle(t) {
-  return t
-    .replace(/[._]+/g, ' ')
-    .replace(/[\[(].*?[\])]/g, '')
-    .replace(/\b(1080p|720p|2160p|4k|bluray|brrip|webrip|web-dl|hdrip|dvdrip|x264|x265|h264|h265|hevc|aac|ac3|dts|remux|proper|extended)\b.*$/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function httpsGetJSON(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
-      let d = '';
-      res.on('data', (c) => (d += c));
-      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
-    }).on('error', reject);
-  });
-}
-
-async function tmdbPoster(title) {
-  if (!TMDB_API_KEY) return null;
-  const q = cleanTitle(title);
-  if (!q) return null;
-  try {
-    const data = await httpsGetJSON(
-      `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(q)}`);
-    const hit = (data.results || []).find((r) => r.poster_path);
-    return hit ? `https://image.tmdb.org/t/p/w500${hit.poster_path}` : null;
-  } catch (_) {
-    return null;
-  }
 }
 
 // --- Saving a poster (drag-and-drop / split-screen capture) ----------------
@@ -271,7 +231,6 @@ function pageHTML(libraryName) {
   header h1{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;font-size:34px;margin:0}
   #crumbs{font-size:13px;color:var(--sub);letter-spacing:.08em;text-transform:uppercase}
   #crumbs a{color:var(--accent);cursor:pointer;text-decoration:none}
-  .toggle{margin-left:auto;font-size:13px;color:var(--sub);cursor:pointer;display:flex;align-items:center;gap:6px}
   #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px;padding:24px}
   .card{background:var(--card);border-radius:10px;overflow:hidden;cursor:pointer;box-shadow:0 2px 8px rgba(60,40,15,.18);transition:transform .12s}
   .card:hover{transform:translateY(-3px)}
@@ -303,7 +262,6 @@ function pageHTML(libraryName) {
 <header>
   <h1>Casto</h1>
   <div id="crumbs"></div>
-  <label class="toggle"><input type="checkbox" id="onlineToggle"> Online posters<span id="keyNote"></span></label>
 </header>
 <div id="grid"></div>
 
@@ -413,17 +371,6 @@ document.getElementById('finderClose').onclick=closeFinder;
   dz.ondrop=(e)=>{ dz.classList.remove('over'); if(finderItem) handleDrop(e, finderItem.id); };
 })();
 
-// --- Online-posters setting ------------------------------------------------
-async function loadSettings(){
-  const d = await (await fetch('/api/settings')).json();
-  document.getElementById('onlineToggle').checked = d.internetPosters;
-  document.getElementById('keyNote').textContent = d.hasKey ? '' : ' (needs TMDB_API_KEY)';
-}
-document.getElementById('onlineToggle').onchange = async (e)=>{
-  await fetch('/api/settings?internet='+(e.target.checked), {method:'POST'});
-  browse(current);
-};
-
 // --- Inline player + cast --------------------------------------------------
 let playingId = null;
 function play(it){
@@ -455,7 +402,6 @@ document.getElementById('closeBtn').onclick = () => {
   document.getElementById('overlay').style.display='none';
 };
 
-loadSettings();
 browse('0');
 </script>
 </body></html>`;
@@ -489,12 +435,6 @@ async function main() {
   const count = [...objects.values()].filter((n) => !n.container).length;
   if (count === 0) { console.error('✗ No video files under ' + root); process.exit(1); }
 
-  // Persisted settings (currently just the online-poster toggle).
-  const CONFIG = path.join(root, '.casto-library.json');
-  const settings = { internetPosters: true };
-  try { Object.assign(settings, JSON.parse(fs.readFileSync(CONFIG, 'utf8'))); } catch (_) {}
-  const saveSettings = () => { try { fs.writeFileSync(CONFIG, JSON.stringify(settings)); } catch (_) {} };
-
   let rendererCache = { at: 0, list: [] };
   const renderers = async () => {
     if (Date.now() - rendererCache.at < 60000 && rendererCache.list.length) return rendererCache.list;
@@ -514,7 +454,7 @@ async function main() {
         if (!node) return json(res, 404, { ok: false });
         const items = (node.children || []).map((cid) => {
           const c = objects.get(cid);
-          // Videos always get an /art URL (local file, TMDb, or 404 → UI fallback).
+          // Videos always get an /art URL (sidecar art, or 404 → UI fallback).
           const poster = c.art || !c.container ? `/art/${c.id}` : null;
           return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', poster };
         });
@@ -524,14 +464,6 @@ async function main() {
       if (p === '/api/devices') {
         const list = await renderers();
         return json(res, 200, { ok: true, devices: list.map((d) => ({ name: d.name })) });
-      }
-
-      if (p === '/api/settings') {
-        if (req.method === 'POST' && u.searchParams.has('internet')) {
-          settings.internetPosters = u.searchParams.get('internet') === 'true';
-          saveSettings();
-        }
-        return json(res, 200, { ok: true, internetPosters: settings.internetPosters, hasKey: !!TMDB_API_KEY });
       }
 
       if (p === '/api/poster' && req.method === 'POST') {
@@ -551,7 +483,6 @@ async function main() {
         const dest = path.join(dir, path.basename(node.file, path.extname(node.file)) + ext);
         fs.writeFileSync(dest, buf);
         node.art = dest;
-        posterCache.delete(node.id);
         return json(res, 200, { ok: true, poster: `/art/${node.id}` });
       }
 
@@ -573,17 +504,8 @@ async function main() {
       }
       if (p.startsWith('/art/')) {
         const node = objects.get(p.slice('/art/'.length));
-        if (!node) { res.writeHead(404); return res.end('Not found'); }
-        if (node.art) {
-          return serveFile(req, res, node.art, IMAGE_TYPES[path.extname(node.art).toLowerCase()] || 'image/jpeg');
-        }
-        // No sidecar art: try TMDb (cached), redirect to its poster image.
-        if (!settings.internetPosters || !TMDB_API_KEY || node.container) { res.writeHead(404); return res.end('Not found'); }
-        let url = posterCache.get(node.id);
-        if (url === undefined) { url = await tmdbPoster(node.title); posterCache.set(node.id, url); }
-        if (url) { res.writeHead(302, { Location: url }); return res.end(); }
-        res.writeHead(404); res.end('Not found');
-        return;
+        if (!node || !node.art) { res.writeHead(404); return res.end('Not found'); }
+        return serveFile(req, res, node.art, IMAGE_TYPES[path.extname(node.art).toLowerCase()] || 'image/jpeg');
       }
       res.writeHead(404); res.end('Not found');
     } catch (e) {
@@ -593,7 +515,7 @@ async function main() {
 
   server.listen(port, '0.0.0.0', () => {
     console.log(`▶ "${name}" — ${count} videos`);
-    console.log(`  posters: sidecar art${TMDB_API_KEY ? ' + TMDb lookup' : ' (set TMDB_API_KEY for auto-posters)'}`);
+    console.log(`  posters: sidecar art + drag-and-drop (🔍 to find one)`);
     console.log(`  open  http://localhost:${port}`);
     console.log(`  (on your network: http://${host}:${port})`);
   });
