@@ -28,7 +28,11 @@ Browse a whole folder, with posters — the Plex-style aspect.
 - ✅ In-browser player: watch locally with fullscreen + Fit/Fill/Stretch, and/or
   cast to a TV — fully independent (cast-only via the card 📺 button, or watch
   here + cast at the same time if you want; nothing is forced)
-- ⬜ Lazy indexing for very large / external-drive libraries
+- ✅ Rename movies/folders (persisted title overrides)
+- ✅ Search across the library + A→Z / Z→A sort
+- ✅ Per-TV "Now Playing" sessions manager (rewind/play/pause/forward/stop)
+- ✅ Works off attached external drives (point at the mount, e.g. /Volumes/…)
+- ⬜ Lazy indexing for very large external drives (huge upfront scan)
 - ⬜ NAS guidance (or run the existing NAS DLNA server instead)
 
 ## M2 — macOS menu-bar app ✅ (build-unverified)

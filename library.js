@@ -246,6 +246,7 @@ function pageHTML(libraryName) {
   header h1{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;font-size:34px;margin:0}
   #crumbs{font-size:13px;color:var(--sub);letter-spacing:.08em;text-transform:uppercase}
   #crumbs a{color:var(--accent);cursor:pointer;text-decoration:none}
+  #q{font:inherit;padding:8px 12px;border-radius:20px;border:1px solid #c9ac74;background:var(--card);color:var(--ink);min-width:200px}
   #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px;padding:24px}
   .card{background:var(--card);border-radius:10px;overflow:hidden;cursor:pointer;box-shadow:0 2px 8px rgba(60,40,15,.18);transition:transform .12s}
   .card:hover{transform:translateY(-3px)}
@@ -286,7 +287,9 @@ function pageHTML(libraryName) {
 <header>
   <h1>Casto</h1>
   <div id="crumbs"></div>
-  <button class="ghost" id="npBtn" style="margin-left:auto;color:var(--accent);border-color:var(--accent)">▶ Now Playing</button>
+  <input id="q" placeholder="Search library…" style="margin-left:auto">
+  <select id="sort"><option value="name-asc">A → Z</option><option value="name-desc">Z → A</option></select>
+  <button class="ghost" id="npBtn" style="color:var(--accent);border-color:var(--accent)">▶ Now Playing</button>
 </header>
 <div id="grid"></div>
 
@@ -329,47 +332,66 @@ let current = '0';
 let finderItem = null;
 function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
 
+let lastItems = [], lastCrumb = [], sortMode = 'name-asc';
+
 async function browse(id){
   current = id;
+  const q = document.getElementById('q'); if(q) q.value='';
   const data = await (await fetch('/api/browse?id='+encodeURIComponent(id))).json();
-  document.getElementById('crumbs').innerHTML =
-    data.breadcrumb.map(c => '<a onclick="browse(\\''+c.id+'\\')">'+esc(c.title)+'</a>').join(' › ');
+  renderItems(data.items, data.breadcrumb);
+}
+async function search(query){
+  const data = await (await fetch('/api/search?q='+encodeURIComponent(query))).json();
+  renderItems(data.items, null);
+}
+function sortItems(items){
+  const dir = sortMode==='name-desc' ? -1 : 1;
+  const folders = items.filter(x=>x.type==='folder').sort((a,b)=>a.title.localeCompare(b.title)*dir);
+  const vids = items.filter(x=>x.type!=='folder').sort((a,b)=>a.title.localeCompare(b.title)*dir);
+  return [...folders, ...vids];
+}
+function renderItems(items, breadcrumb){
+  lastItems = items; lastCrumb = breadcrumb;
+  document.getElementById('crumbs').innerHTML = breadcrumb
+    ? breadcrumb.map(c => '<a onclick="browse(\\''+c.id+'\\')">'+esc(c.title)+'</a>').join(' › ')
+    : '<a onclick="browse(\\'0\\')">Library</a> › search results';
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
-  for(const it of data.items){
-    const card = document.createElement('div');
-    card.className = 'card' + (it.type==='folder'?' folder':'');
-    const thumb = document.createElement('div');
-    thumb.className='thumb';
-    const fallback = it.type==='folder' ? '📁' : '🎬';
-    if(it.poster){
-      const img=document.createElement('img'); img.src=it.poster; img.loading='lazy';
-      img.onerror=()=>{ img.remove(); if(!thumb.textContent) thumb.textContent=fallback; };
-      thumb.appendChild(img);
-    } else { thumb.textContent = fallback; }
-    if(it.type==='video'){
-      const cast=document.createElement('button');
-      cast.className='findbtn castbtn'; cast.textContent='📺 cast'; cast.title='Cast to a TV (no local playback)';
-      cast.onclick=(e)=>{ e.stopPropagation(); open(it, false); };
-      thumb.appendChild(cast);
-      const find=document.createElement('button');
-      find.className='findbtn'; find.textContent='🔍 poster'; find.title='Find a poster';
-      find.onclick=(e)=>{ e.stopPropagation(); openFinder(it); };
-      thumb.appendChild(find);
-      card.ondragover=(e)=>{ e.preventDefault(); card.classList.add('over'); };
-      card.ondragleave=()=> card.classList.remove('over');
-      card.ondrop=(e)=>{ card.classList.remove('over'); handleDrop(e, it.id); };
-    }
-    const ren=document.createElement('button');
-    ren.className='findbtn renbtn'; ren.textContent='✎'; ren.title='Rename';
-    ren.onclick=(e)=>{ e.stopPropagation(); rename(it); };
-    thumb.appendChild(ren);
-    const label = document.createElement('div');
-    label.className='label'; label.textContent = it.title;
-    card.appendChild(thumb); card.appendChild(label);
-    card.onclick = () => it.type==='folder' ? browse(it.id) : play(it);
-    grid.appendChild(card);
+  for(const it of sortItems(items)) grid.appendChild(makeCard(it));
+}
+function makeCard(it){
+  const card = document.createElement('div');
+  card.className = 'card' + (it.type==='folder'?' folder':'');
+  const thumb = document.createElement('div');
+  thumb.className='thumb';
+  const fallback = it.type==='folder' ? '📁' : '🎬';
+  if(it.poster){
+    const img=document.createElement('img'); img.src=it.poster; img.loading='lazy';
+    img.onerror=()=>{ img.remove(); if(!thumb.textContent) thumb.textContent=fallback; };
+    thumb.appendChild(img);
+  } else { thumb.textContent = fallback; }
+  if(it.type==='video'){
+    const cast=document.createElement('button');
+    cast.className='findbtn castbtn'; cast.textContent='📺 cast'; cast.title='Cast to a TV (no local playback)';
+    cast.onclick=(e)=>{ e.stopPropagation(); open(it, false); };
+    thumb.appendChild(cast);
+    const find=document.createElement('button');
+    find.className='findbtn'; find.textContent='🔍 poster'; find.title='Find a poster';
+    find.onclick=(e)=>{ e.stopPropagation(); openFinder(it); };
+    thumb.appendChild(find);
+    card.ondragover=(e)=>{ e.preventDefault(); card.classList.add('over'); };
+    card.ondragleave=()=> card.classList.remove('over');
+    card.ondrop=(e)=>{ card.classList.remove('over'); handleDrop(e, it.id); };
   }
+  const ren=document.createElement('button');
+  ren.className='findbtn renbtn'; ren.textContent='✎'; ren.title='Rename';
+  ren.onclick=(e)=>{ e.stopPropagation(); rename(it); };
+  thumb.appendChild(ren);
+  const label = document.createElement('div');
+  label.className='label'; label.textContent = it.title;
+  card.appendChild(thumb); card.appendChild(label);
+  card.onclick = () => it.type==='folder' ? browse(it.id) : play(it);
+  return card;
 }
 
 // --- Set a poster by drag-and-drop -----------------------------------------
@@ -492,6 +514,15 @@ document.getElementById('closeBtn').onclick = () => {
   document.getElementById('overlay').style.display='none';
 };
 
+// --- Search + sort ---------------------------------------------------------
+let qTimer=null;
+document.getElementById('q').oninput=(e)=>{
+  const v=e.target.value.trim();
+  clearTimeout(qTimer);
+  qTimer=setTimeout(()=> v ? search(v) : browse(current), 200);
+};
+document.getElementById('sort').onchange=(e)=>{ sortMode=e.target.value; renderItems(lastItems, lastCrumb); };
+
 // --- Now Playing (sessions manager) ----------------------------------------
 let npTimer=null;
 document.getElementById('npBtn').onclick=()=>{ document.getElementById('nowp').style.display='flex'; refreshNP(); clearInterval(npTimer); npTimer=setInterval(refreshNP,3000); };
@@ -583,6 +614,20 @@ async function main() {
           return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', poster };
         });
         return json(res, 200, { ok: true, folder: { id: node.id, title: node.title }, breadcrumb: breadcrumb(objects, node.id), items });
+      }
+
+      if (p === '/api/search') {
+        const query = (u.searchParams.get('q') || '').toLowerCase().trim();
+        const items = [];
+        if (query) {
+          for (const n of objects.values()) {
+            if (n.container || n.id === '0') continue;
+            if (n.title.toLowerCase().includes(query)) {
+              items.push({ id: n.id, title: n.title, type: 'video', poster: `/art/${n.id}` });
+            }
+          }
+        }
+        return json(res, 200, { ok: true, items });
       }
 
       if (p === '/api/devices') {
