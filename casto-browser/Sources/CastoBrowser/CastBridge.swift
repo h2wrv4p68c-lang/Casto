@@ -25,6 +25,11 @@ final class CastBridge {
 
   private func locateCasto() -> String? {
     let fm = FileManager.default
+    // Bundled copy (installed .app) wins, then dev/source locations.
+    if let res = Bundle.main.resourceURL {
+      let bundled = res.appendingPathComponent("casto.js").path
+      if fm.fileExists(atPath: bundled) { return bundled }
+    }
     let here = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     let candidates = [
       here.appendingPathComponent("../../../../casto.js"), // repo root from Sources/CastoBrowser
@@ -41,6 +46,10 @@ final class CastBridge {
 
   private func locateNode() -> String {
     let fm = FileManager.default
+    if let res = Bundle.main.resourceURL {
+      let bundled = res.appendingPathComponent("node").path
+      if fm.isExecutableFile(atPath: bundled) { return bundled }
+    }
     for c in ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"]
     where fm.isExecutableFile(atPath: c) { return c }
     return "/usr/bin/env"

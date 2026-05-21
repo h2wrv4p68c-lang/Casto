@@ -57,15 +57,13 @@ Working / wired:
 - WKWebView browser window with toolbar + address bar.
 - `Router` + `BrowserCore` function surface.
 - **HTTP control transport** on `127.0.0.1:7766`.
-- `CastBridge` that shells out to the repo's `casto.js`.
+- **`casto://` deep-link transport** — AppleEvent handler + `Info.plist`
+  `CFBundleURLTypes`. Registers once the app is built + installed (see below).
+- `CastBridge` that shells out to `casto.js` (bundled into the .app), now
+  casting remote URLs too.
 - "Cast" button extracts the page's first `<video>` source and casts it.
 
 Stubbed / next:
-- **`casto://` URL-scheme transport** — needs the `.app` bundle + `Info.plist`
-  `CFBundleURLTypes` + an AppleEvent handler (same packaging pattern as the
-  Casto menu-bar app). The Router is already transport-agnostic.
-- **Remote-URL casting in `casto.js`** — today it casts local files; passing an
-  `http(s)` media URL straight to `SetAVTransportURI` is the immediate follow-up.
 - Tabs / multiple windows (`window=new` is currently a no-op).
 - Library hook (browse/queue), reader mode, embeddable `CastoWebView` for other
   Swift apps to drop in.
@@ -76,12 +74,17 @@ Needs macOS + Xcode toolchain.
 
 ```bash
 cd casto-browser
-swift run            # launches the browser; control API on :7766
+swift run            # dev: launches the browser; control API on :7766
 ```
 
-> The `casto://` deep links only register once this is packaged as a signed
-> `.app` (URL schemes require a bundle). `swift run` exercises everything via
-> the HTTP transport in the meantime.
+For the `casto://` deep links (URL schemes require a real bundle):
+
+```bash
+./build-app.sh                       # produces CastoBrowser.app
+mv CastoBrowser.app /Applications/    # register with LaunchServices
+open /Applications/CastoBrowser.app   # open once
+open "casto://open?url=apple.com"     # now deep links work
+```
 
 ## Design note: why not a from-scratch engine?
 

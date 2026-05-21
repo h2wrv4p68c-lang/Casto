@@ -36,8 +36,9 @@ Browse a whole folder from the TV.
 Lightweight, API-driven, embeddable browser on system WebKit.
 - ✅ v0 scaffold: WKWebView window, Router, BrowserCore, CastBridge
 - ✅ HTTP control transport (`:7766`) — open/search/navigate/cast/status
-- 🟡 Cast hook: extract page `<video>` src → casto.js (now accepts URLs)
-- ⬜ `casto://` deep-link transport (needs `.app` bundle + Info.plist)
+- ✅ Cast hook: extract page `<video>` src → casto.js (now accepts URLs)
+- ✅ `casto://` deep-link transport (AppleEvent + Info.plist; registers on build/install)
+- ✅ Packaging: build-app.sh (bundles casto.js + Node, sign/notarize)
 - ⬜ Tabs / multiple windows
 - ⬜ Library hook (browse, queue, "cast from library")
 - ⬜ Embeddable `CastoWebView` for other Swift apps to drop in
