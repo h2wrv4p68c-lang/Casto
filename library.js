@@ -194,6 +194,21 @@ async function castTo(controlURL, url, title, contentType) {
   await soap(controlURL, 'Play', '<InstanceID>0</InstanceID><Speed>1</Speed>');
 }
 
+const tx = {
+  play: (c) => soap(c, 'Play', '<InstanceID>0</InstanceID><Speed>1</Speed>'),
+  pause: (c) => soap(c, 'Pause', '<InstanceID>0</InstanceID>'),
+  stop: (c) => soap(c, 'Stop', '<InstanceID>0</InstanceID>'),
+};
+const hms = (s) => { s = Math.max(0, Math.floor(s)); const h = (s / 3600) | 0, m = ((s % 3600) / 60) | 0;
+  return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+async function seekRel(controlURL, delta) {
+  const info = await soap(controlURL, 'GetPositionInfo', '<InstanceID>0</InstanceID>');
+  const t = (/<RelTime>([^<]*)<\/RelTime>/i.exec(info) || [])[1] || '0:00:00';
+  const m = /(\d+):(\d+):(\d+)/.exec(t) || [0, 0, 0, 0];
+  const cur = +m[1] * 3600 + +m[2] * 60 + +m[3];
+  await soap(controlURL, 'Seek', `<InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>${hms(cur + delta)}</Target>`);
+}
+
 // --- File serving (Range) --------------------------------------------------
 
 function serveFile(req, res, filePath, contentType) {
@@ -257,6 +272,11 @@ function pageHTML(libraryName) {
   #dropzone{flex:1;border:3px dashed var(--accent);border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--sub);padding:20px}
   #dropzone.over{background:#efe2c4}
   .hint{font-size:12px;color:var(--sub)}
+  /* now-playing sessions manager */
+  #nowp{position:fixed;inset:0;background:rgba(20,12,4,.6);display:none;align-items:center;justify-content:center;z-index:20}
+  .npcard{background:var(--card);border-radius:12px;padding:18px 20px;min-width:440px;max-width:90vw;max-height:80vh;overflow:auto}
+  .nprow{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #e0cfa6}
+  .nprow button{padding:6px 10px}
   /* player overlay */
   #overlay{position:fixed;inset:0;background:rgba(20,12,4,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;z-index:10}
   #overlay video{max-width:90vw;max-height:72vh;background:#000;border-radius:8px}
@@ -266,6 +286,7 @@ function pageHTML(libraryName) {
 <header>
   <h1>Casto</h1>
   <div id="crumbs"></div>
+  <button class="ghost" id="npBtn" style="margin-left:auto;color:var(--accent);border-color:var(--accent)">▶ Now Playing</button>
 </header>
 <div id="grid"></div>
 
@@ -278,6 +299,13 @@ function pageHTML(libraryName) {
   <div class="hint">Opens an image search in a new window. Drag a poster from there onto the box below (or drop one from your desktop).</div>
   <div id="dropzone">Drag a poster image here</div>
 </aside>
+
+<div id="nowp">
+  <div class="npcard">
+    <div class="frow"><div id="finderTitle" style="flex:1"><b>Now Playing</b></div><button class="ghost" id="npClose" style="color:var(--accent);border-color:var(--accent)">Close</button></div>
+    <div id="nplist"></div>
+  </div>
+</div>
 
 <div id="overlay">
   <div id="ptitle"></div>
@@ -464,6 +492,28 @@ document.getElementById('closeBtn').onclick = () => {
   document.getElementById('overlay').style.display='none';
 };
 
+// --- Now Playing (sessions manager) ----------------------------------------
+let npTimer=null;
+document.getElementById('npBtn').onclick=()=>{ document.getElementById('nowp').style.display='flex'; refreshNP(); clearInterval(npTimer); npTimer=setInterval(refreshNP,3000); };
+document.getElementById('npClose').onclick=()=>{ document.getElementById('nowp').style.display='none'; clearInterval(npTimer); };
+async function refreshNP(){
+  let d; try{ d=await (await fetch('/api/sessions')).json(); }catch(_){ return; }
+  const list=document.getElementById('nplist'); list.innerHTML='';
+  if(!d.sessions || !d.sessions.length){ list.textContent='Nothing casting right now.'; return; }
+  for(const s of d.sessions){
+    const row=document.createElement('div'); row.className='nprow';
+    const label=document.createElement('div'); label.style.flex='1';
+    label.innerHTML='<b>'+esc(s.tv)+'</b><br><span style="color:var(--sub);font-size:13px">'+esc(s.title)+'</span>';
+    row.appendChild(label);
+    for(const [txt,act,tip] of [['⏪','back','Rewind 30s'],['▶','play','Play'],['⏸','pause','Pause'],['⏩','forward','Forward 30s'],['⏹','stop','Stop']]){
+      const b=document.createElement('button'); b.textContent=txt; b.title=tip;
+      b.onclick=async()=>{ await fetch('/api/control?target='+encodeURIComponent(s.tv)+'&action='+act,{method:'POST'}); if(act==='stop') refreshNP(); };
+      row.appendChild(b);
+    }
+    list.appendChild(row);
+  }
+}
+
 browse('0');
 </script>
 </body></html>`;
@@ -568,8 +618,26 @@ async function main() {
         if (!dev) return json(res, 404, { ok: false, error: 'no matching TV' });
         const url = `http://${host}:${port}/media/${node.id}`;
         await castTo(dev.controlURL, url, node.title, node.contentType);
-        castByDevice.set(dev.name, dev.controlURL);
+        castByDevice.set(dev.name, { controlURL: dev.controlURL, title: node.title });
         return json(res, 200, { ok: true, device: dev.name });
+      }
+
+      if (p === '/api/sessions') {
+        return json(res, 200, { ok: true, sessions: [...castByDevice.entries()].map(([tv, s]) => ({ tv, title: s.title })) });
+      }
+
+      if (p === '/api/control' && req.method === 'POST') {
+        const target = u.searchParams.get('target') || '';
+        const s = castByDevice.get(target);
+        if (!s) return json(res, 404, { ok: false, error: 'no active session for that TV' });
+        const a = u.searchParams.get('action');
+        if (a === 'play') await tx.play(s.controlURL);
+        else if (a === 'pause') await tx.pause(s.controlURL);
+        else if (a === 'forward') await seekRel(s.controlURL, 30);
+        else if (a === 'back') await seekRel(s.controlURL, -30);
+        else if (a === 'stop') { await tx.stop(s.controlURL); castByDevice.delete(target); }
+        else return json(res, 400, { ok: false, error: 'unknown action' });
+        return json(res, 200, { ok: true });
       }
 
       if (p === '/api/rename' && req.method === 'POST') {
@@ -585,7 +653,8 @@ async function main() {
 
       if (p === '/api/stop' && req.method === 'POST') {
         const target = u.searchParams.get('target') || '';
-        let controlURL = castByDevice.get(target);
+        const active = castByDevice.get(target);
+        let controlURL = active && active.controlURL;
         if (!controlURL) {
           const dev = (await renderers()).find((d) => d.name.toLowerCase().includes(target.toLowerCase()));
           controlURL = dev && dev.controlURL;
