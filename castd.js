@@ -23,6 +23,13 @@ const os = require('os');
 const http = require('http');
 const path = require('path');
 const dgram = require('dgram');
+
+function preventSleep() {
+  if (process.platform !== "darwin") return;
+  try {
+    require("child_process").spawn("caffeinate", ["-i", "-w", String(process.pid)], { stdio: "ignore", detached: true }).unref();
+  } catch (_) {}
+}
 const crypto = require('crypto');
 const { URL } = require('url');
 
@@ -286,6 +293,7 @@ async function main() {
   }
   const host = get('--host', localIPv4());
   if (!host) { console.error('✗ Could not determine LAN IP; pass --host.'); process.exit(1); }
+  preventSleep();
   const apiPort = parseInt(get('--port', '7700'), 10);
   const bind = get('--bind', '127.0.0.1');
   const token = loadToken();

@@ -14,6 +14,13 @@ const os = require('os');
 const http = require('http');
 const path = require('path');
 const dgram = require('dgram');
+
+function preventSleep() {
+  if (process.platform !== "darwin") return;
+  try {
+    require("child_process").spawn("caffeinate", ["-i", "-w", String(process.pid)], { stdio: "ignore", detached: true }).unref();
+  } catch (_) {}
+}
 const crypto = require('crypto');
 
 const SSDP_ADDR = '239.255.255.250';
@@ -673,6 +680,7 @@ async function main() {
     );
     process.exit(args.help ? 0 : 1);
   }
+  preventSleep();
 
   const root = path.resolve(args.dir);
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {

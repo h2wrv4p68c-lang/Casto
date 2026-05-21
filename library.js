@@ -16,7 +16,19 @@ const http = require('http');
 const https = require('https');
 const path = require('path');
 const dgram = require('dgram');
+const crypto = require('crypto');
 const { URL } = require('url');
+
+// Keep the Mac awake while serving so streams don't pause on sleep. caffeinate
+// -w <pid> exits automatically when this process does.
+function preventSleep() {
+  if (process.platform !== 'darwin') return;
+  try {
+    require('child_process')
+      .spawn('caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore', detached: true })
+      .unref();
+  } catch (_) {}
+}
 
 const AVT = 'urn:schemas-upnp-org:service:AVTransport:1';
 const SSDP_ADDR = '239.255.255.250';
@@ -44,57 +56,70 @@ const xmlEscape = (s) =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
-// --- Index a folder into a browsable tree ----------------------------------
+// --- Lazy, non-blocking indexing -------------------------------------------
+// Folders are scanned one level at a time, on demand (browse) or by a
+// background crawl. Nothing scans the whole tree synchronously, so startup and
+// requests never block — even on a huge external drive.
 
-function buildTree(root) {
-  const objects = new Map();
-  let nextId = 1;
-
-  function posterFor(filePath, isDir) {
-    const dir = isDir ? filePath : path.dirname(filePath);
-    if (!isDir) {
-      const base = path.basename(filePath, path.extname(filePath));
-      for (const ext of IMAGE_EXTS) {
-        const p = path.join(dir, base + ext);
-        if (fs.existsSync(p)) return p;
-      }
-    }
-    for (const name of POSTER_NAMES)
-      for (const ext of IMAGE_EXTS) {
-        const p = path.join(dir, name + ext);
-        if (fs.existsSync(p)) return p;
-      }
-    return null;
+function posterFor(filePath, isDir) {
+  const dir = isDir ? filePath : path.dirname(filePath);
+  if (!isDir) {
+    const base = path.basename(filePath, path.extname(filePath));
+    for (const ext of IMAGE_EXTS) { const p = path.join(dir, base + ext); if (fs.existsSync(p)) return p; }
   }
+  for (const name of POSTER_NAMES)
+    for (const ext of IMAGE_EXTS) { const p = path.join(dir, name + ext); if (fs.existsSync(p)) return p; }
+  return null;
+}
 
-  function scan(dirPath, parentId, title) {
-    const id = parentId === '-1' ? '0' : String(nextId++);
-    const node = { id, parentId, container: true, title, path: dirPath, art: posterFor(dirPath, true), children: [] };
-    objects.set(id, node);
-    let entries = [];
-    try { entries = fs.readdirSync(dirPath, { withFileTypes: true }); } catch (_) { return node; }
-    const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).sort((a, b) => a.name.localeCompare(b.name));
-    const files = entries.filter((e) => e.isFile() && VIDEO_EXTS.includes(path.extname(e.name).toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
-    for (const d of dirs) {
-      const child = scan(path.join(dirPath, d.name), id, d.name);
-      if (child.children.length > 0) node.children.push(child.id);
-      else objects.delete(child.id);
-    }
-    for (const f of files) {
-      const filePath = path.join(dirPath, f.name);
-      const ext = path.extname(f.name).toLowerCase();
-      const cid = String(nextId++);
-      objects.set(cid, {
-        id: cid, parentId: id, container: false, title: path.basename(f.name, ext),
-        file: filePath, contentType: CONTENT_TYPES[ext] || 'video/mp4',
-        size: fs.statSync(filePath).size, art: posterFor(filePath, false),
-      });
-      node.children.push(cid);
-    }
-    return node;
+function makeRoot(root, config) {
+  return { id: '0', parentId: '-1', container: true, title: config.titles[''] || path.basename(root) || 'Library', path: root, art: posterFor(root, true), children: [], scanned: false };
+}
+
+// Scan one folder level into `ctx.map`, applying title overrides and skipping
+// deliberately-removed paths. Idempotent unless `force`.
+function scanDirInto(ctx, node, root, config, force) {
+  if (node.scanned && !force) return;
+  node.scanned = true;
+  node.children = [];
+  let entries = [];
+  try { entries = fs.readdirSync(node.path, { withFileTypes: true }); } catch (_) { return; }
+  const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).sort((a, b) => a.name.localeCompare(b.name));
+  const files = entries.filter((e) => e.isFile() && VIDEO_EXTS.includes(path.extname(e.name).toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
+  for (const d of dirs) {
+    const dp = path.join(node.path, d.name);
+    const rel = path.relative(root, dp);
+    if (config.removed.includes(rel)) continue;
+    const id = String(ctx.nextId++);
+    ctx.map.set(id, { id, parentId: node.id, container: true, title: config.titles[rel] || d.name, path: dp, art: posterFor(dp, true), children: [], scanned: false });
+    node.children.push(id);
   }
-  scan(root, '-1', path.basename(root) || 'Library');
-  return objects;
+  for (const f of files) {
+    const fp = path.join(node.path, f.name);
+    const rel = path.relative(root, fp);
+    if (config.removed.includes(rel)) continue;
+    const ext = path.extname(f.name).toLowerCase();
+    const id = String(ctx.nextId++);
+    let size = 0; try { size = fs.statSync(fp).size; } catch (_) {}
+    ctx.map.set(id, { id, parentId: node.id, container: false, title: config.titles[rel] || path.basename(f.name, ext), file: fp, contentType: CONTENT_TYPES[ext] || 'video/mp4', size, art: posterFor(fp, false) });
+    node.children.push(id);
+  }
+}
+
+// Build the whole tree into a fresh map, yielding to the event loop between
+// folders so it never blocks the server.
+async function buildAsync(root, config) {
+  const ctx = { map: new Map(), nextId: 1 };
+  const rootNode = makeRoot(root, config);
+  ctx.map.set('0', rootNode);
+  const queue = [rootNode];
+  while (queue.length) {
+    const node = queue.shift();
+    if (fs.existsSync(node.path)) scanDirInto(ctx, node, root, config);
+    for (const cid of node.children) { const c = ctx.map.get(cid); if (c && c.container) queue.push(c); }
+    await new Promise((r) => setImmediate(r));
+  }
+  return ctx.map;
 }
 
 // --- Saving a poster (drag-and-drop / split-screen capture) ----------------
@@ -292,6 +317,7 @@ function pageHTML(libraryName) {
   <div id="crumbs"></div>
   <input id="q" placeholder="Search library…" style="margin-left:auto">
   <select id="sort"><option value="name-asc">A → Z</option><option value="name-desc">Z → A</option></select>
+  <button class="ghost" id="reindexBtn" style="color:var(--accent);border-color:var(--accent)" title="Rescan the drive for changes">↻ Rescan</button>
   <button class="ghost" id="npBtn" style="color:var(--accent);border-color:var(--accent)">▶ Now Playing</button>
 </header>
 <div id="grid"></div>
@@ -543,6 +569,11 @@ document.getElementById('q').oninput=(e)=>{
   qTimer=setTimeout(()=> v ? search(v) : browse(current), 200);
 };
 document.getElementById('sort').onchange=(e)=>{ sortMode=e.target.value; renderItems(lastItems, lastCrumb); };
+document.getElementById('reindexBtn').onclick=async()=>{
+  const b=document.getElementById('reindexBtn'); b.textContent='↻ Rescanning…';
+  await fetch('/api/reindex',{method:'POST'});
+  setTimeout(()=>{ b.textContent='↻ Rescan'; browse(current); }, 1500);
+};
 
 // --- Now Playing (sessions manager) ----------------------------------------
 let npTimer=null;
@@ -589,31 +620,23 @@ async function main() {
     process.exit(dir ? 0 : 1);
   }
   const root = path.resolve(dir);
-  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) { console.error('✗ Not a folder: ' + root); process.exit(1); }
   const host = get('--host', localIPv4()) || '127.0.0.1';
   const port = parseInt(get('--port', '8010'), 10);
+  preventSleep();
 
-  console.log('⊙ Indexing…');
-  const objects = buildTree(root);
-  const name = objects.get('0').title;
-  const count = [...objects.values()].filter((n) => !n.container).length;
-  if (count === 0) { console.error('✗ No video files under ' + root); process.exit(1); }
-
-  // Custom display-title overrides + deliberately-removed folders, keyed by
-  // path relative to the library root.
-  const CONFIG = path.join(root, '.casto-library.json');
-  const config = { titles: {}, removed: [] };
-  try { Object.assign(config, JSON.parse(fs.readFileSync(CONFIG, 'utf8'))); } catch (_) {}
+  // State (title overrides, removed folders) AND the index cache live in HOME,
+  // keyed by the library path — NOT on the drive. So an unplugged drive (or a
+  // trip to a friend's house) doesn't lose the library or force a reindex.
+  const STATE_DIR = path.join(os.homedir(), '.casto');
+  const stateFile = path.join(STATE_DIR, 'lib-' + crypto.createHash('md5').update(root).digest('hex') + '.json');
+  const config = { titles: {}, removed: [], index: null };
+  try { Object.assign(config, JSON.parse(fs.readFileSync(stateFile, 'utf8'))); } catch (_) {}
   config.titles = config.titles || {};
   config.removed = config.removed || [];
-  const relOf = (node) => path.relative(root, node.path || node.file);
-  for (const node of objects.values()) {
-    const t = config.titles[relOf(node)];
-    if (t) node.title = t;
-  }
-  const saveConfig = () => { try { fs.writeFileSync(CONFIG, JSON.stringify(config)); } catch (_) {} };
 
-  // Remove a node and its descendants from the in-memory index.
+  const objects = new Map();
+  const liveCtx = { map: objects, nextId: 1 };
+  const relOf = (node) => path.relative(root, node.path || node.file);
   const removeSubtree = (node) => {
     for (const cid of node.children || []) { const c = objects.get(cid); if (c) removeSubtree(c); }
     objects.delete(node.id);
@@ -623,22 +646,65 @@ async function main() {
     if (parent && parent.children) parent.children = parent.children.filter((x) => x !== node.id);
   };
   const findByRel = (rel) => [...objects.values()].find((n) => n.id !== '0' && relOf(n) === rel);
-
-  // Apply deliberate removals persisted from earlier sessions.
-  for (const rel of config.removed) {
-    const n = findByRel(rel);
-    if (n) { detach(n); removeSubtree(n); }
-  }
-
-  // Availability: a folder whose path is gone (drive unplugged) is "pending",
-  // NOT removed — it returns when the path reappears. Checked periodically.
-  const checkAvailability = () => {
-    for (const n of objects.values()) {
-      if (n.container && n.path) n.unavailable = !fs.existsSync(n.path);
+  const maxId = () => [...objects.keys()].reduce((m, k) => Math.max(m, +k || 0), 0);
+  const serialize = () => [...objects.values()].map((n) =>
+    ({ id: n.id, parentId: n.parentId, container: n.container, title: n.title, path: n.path, file: n.file, contentType: n.contentType, size: n.size, art: n.art, children: n.children, scanned: n.scanned }));
+  const saveConfig = () => {
+    try { config.index = serialize(); fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(stateFile, JSON.stringify(config)); } catch (_) {}
+  };
+  const markAvailability = () => {
+    for (const n of objects.values()) if (n.container && n.path) n.unavailable = !fs.existsSync(n.path);
+  };
+  // Lazy: scan a folder the first time it's browsed (instant, one level).
+  const ensureScanned = (node) => {
+    if (node && node.container && !node.scanned && fs.existsSync(node.path)) {
+      scanDirInto(liveCtx, node, root, config);
     }
   };
-  checkAvailability();
-  setInterval(checkAvailability, 10000);
+
+  // Full refresh: rebuild off disk in the background (non-blocking), then swap
+  // it in. Used at startup (when the drive is present), on reconnect, and on
+  // the user-triggered rescan.
+  let refreshing = false;
+  const refresh = async () => {
+    if (refreshing || !fs.existsSync(root)) return;
+    refreshing = true;
+    try {
+      const fresh = await buildAsync(root, config);
+      objects.clear();
+      for (const [k, v] of fresh) objects.set(k, v);
+      liveCtx.nextId = maxId() + 1;
+      markAvailability();
+      saveConfig();
+    } finally { refreshing = false; }
+  };
+
+  console.log('⊙ Loading library…');
+  if (config.index && config.index.length) {
+    for (const n of config.index) objects.set(n.id, { ...n });
+    for (const rel of config.removed) { const n = findByRel(rel); if (n) { detach(n); removeSubtree(n); } }
+    liveCtx.nextId = maxId() + 1;
+    markAvailability();
+  } else if (fs.existsSync(root) && fs.statSync(root).isDirectory()) {
+    objects.set('0', makeRoot(root, config)); // lazy: children scan on first browse
+    liveCtx.nextId = 1;
+  } else {
+    console.error('✗ Drive not connected and no cached index for ' + root);
+    process.exit(1);
+  }
+  if (fs.existsSync(root)) refresh(); // fill / refresh in the background
+
+  const name = (objects.get('0') || {}).title || path.basename(root) || 'Library';
+  const count = () => [...objects.values()].filter((n) => !n.container).length;
+
+  // Periodic availability + auto-refresh the moment the drive reconnects.
+  let rootAvail = fs.existsSync(root);
+  setInterval(() => {
+    const now = fs.existsSync(root);
+    if (now && !rootAvail) { refresh().then(() => console.log('↻ drive reconnected — index refreshed')); }
+    else markAvailability();
+    rootAvail = now;
+  }, 10000);
 
   let rendererCache = { at: 0, list: [] };
   const castByDevice = new Map(); // tvName -> controlURL (active casts)
@@ -658,6 +724,7 @@ async function main() {
       if (p === '/api/browse') {
         const node = objects.get(u.searchParams.get('id') || '0');
         if (!node) return json(res, 404, { ok: false });
+        ensureScanned(node); // lazy: scan this folder on first visit
         const items = (node.children || []).map((cid) => {
           const c = objects.get(cid);
           // Videos always get an /art URL (sidecar art, or 404 → UI fallback).
@@ -666,6 +733,11 @@ async function main() {
           return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', poster, available };
         });
         return json(res, 200, { ok: true, folder: { id: node.id, title: node.title }, breadcrumb: breadcrumb(objects, node.id), items });
+      }
+
+      if (p === '/api/reindex' && req.method === 'POST') {
+        refresh(); // fire-and-forget; non-blocking
+        return json(res, 200, { ok: true, refreshing: true });
       }
 
       if (p === '/api/search') {
@@ -796,7 +868,7 @@ async function main() {
   });
 
   server.listen(port, '0.0.0.0', () => {
-    console.log(`▶ "${name}" — ${count} videos`);
+    console.log(`▶ "${name}" — ${count()} videos indexed so far (lazy + background)`);
     console.log(`  posters: sidecar art + drag-and-drop (🔍 to find one)`);
     console.log(`  open  http://localhost:${port}`);
     console.log(`  (on your network: http://${host}:${port})`);

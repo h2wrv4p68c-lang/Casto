@@ -21,6 +21,13 @@ const os = require('os');
 const http = require('http');
 const path = require('path');
 const dgram = require('dgram');
+
+function preventSleep() {
+  if (process.platform !== "darwin") return;
+  try {
+    require("child_process").spawn("caffeinate", ["-i", "-w", String(process.pid)], { stdio: "ignore", detached: true }).unref();
+  } catch (_) {}
+}
 const readline = require('readline');
 const { URL } = require('url');
 
@@ -511,6 +518,7 @@ async function main() {
     );
     process.exit(args.help ? 0 : 1);
   }
+  preventSleep();
 
   // A remote http(s) URL is cast straight to the TV (no local server); a
   // local path is resolved (folder/--browse → interactive pick) and served.

@@ -34,7 +34,12 @@ Browse a whole folder, with posters — the Plex-style aspect.
 - ✅ Works off attached external drives (point at the mount, e.g. /Volumes/…)
 - ✅ Deliberate "Remove from library" (persisted, files untouched) vs. an
   unplugged drive going "pending" and auto-returning on reconnect
-- ⬜ Lazy indexing for very large external drives (huge upfront scan)
+- ✅ Lazy + non-blocking indexing: folders scan on first browse, a background
+  crawl fills search, never blocks startup/requests (good for big 4TB drives)
+- ✅ Index cached in ~/.casto (keyed by path, NOT on the drive) — survives the
+  drive being unplugged / a trip out, no reindex; auto-refresh on reconnect
+- ✅ User-triggered ↻ Rescan
+- ✅ caffeinate keeps the Mac awake while serving so streams don't pause
 - ⬜ NAS guidance (or run the existing NAS DLNA server instead)
 
 ## M2 — macOS menu-bar app ✅ (build-unverified)
