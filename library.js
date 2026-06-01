@@ -18,6 +18,7 @@ const path = require('path');
 const dgram = require('dgram');
 const crypto = require('crypto');
 const { URL } = require('url');
+const podcasts = require('./podcast-core'); // Podcasts content-type for the hub
 
 // Keep the Mac awake while serving so streams don't pause on sleep. caffeinate
 // -w <pid> exits automatically when this process does.
@@ -41,9 +42,26 @@ const CONTENT_TYPES = {
   '.mpg': 'video/mpeg', '.mpeg': 'video/mpeg', '.ts': 'video/mp2t', '.3gp': 'video/3gpp',
 };
 const VIDEO_EXTS = Object.keys(CONTENT_TYPES);
+const AUDIO_TYPES = {
+  '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac',
+  '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.oga': 'audio/ogg', '.opus': 'audio/opus', '.wma': 'audio/x-ms-wma',
+};
+const AUDIO_EXTS = Object.keys(AUDIO_TYPES);
+const MEDIA_TYPES = { ...CONTENT_TYPES, ...AUDIO_TYPES };
+const MEDIA_EXTS = Object.keys(MEDIA_TYPES);
 const IMAGE_TYPES = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 const IMAGE_EXTS = Object.keys(IMAGE_TYPES);
 const POSTER_NAMES = ['poster', 'folder', 'cover', 'thumb'];
+
+// Content-type ("kind") classification for the unified hub. Audio → music.
+// Video → tv if it looks episodic (SxxExx / "Season N" / 1x02 / "Episode N"),
+// else movie. It's a heuristic — no metadata provider — but a good-enough split
+// for filter chips. Podcasts are a separate, feed-sourced kind (not files).
+const TV_PATTERN = /\bS\d{1,2}\s?E\d{1,2}\b|\b\d{1,2}x\d{2}\b|\bseason\s*\d+\b|\bepisode\s*\d+\b/i;
+function mediaKind(ext, relPath) {
+  if (AUDIO_EXTS.includes(ext)) return 'music';
+  return TV_PATTERN.test(relPath) ? 'tv' : 'movie';
+}
 
 function localIPv4() {
   const ifaces = os.networkInterfaces();
@@ -91,7 +109,7 @@ async function scanDirInto(ctx, node, root, config) {
   if (!node.art) node.art = folderPoster(node.path, fileNames);
 
   const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).sort((a, b) => a.name.localeCompare(b.name));
-  const files = entries.filter((e) => e.isFile() && VIDEO_EXTS.includes(path.extname(e.name).toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
+  const files = entries.filter((e) => e.isFile() && MEDIA_EXTS.includes(path.extname(e.name).toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
 
   for (const d of dirs) {
     const dp = path.join(node.path, d.name);
@@ -111,7 +129,7 @@ async function scanDirInto(ctx, node, root, config) {
     for (const ie of IMAGE_EXTS) if (fileNames.has(base + ie)) { art = path.join(node.path, base + ie); break; }
     if (!art) art = node.art; // fall back to the folder poster
     const id = String(ctx.nextId++);
-    ctx.map.set(id, { id, parentId: node.id, container: false, title: config.titles[rel] || base, file: fp, contentType: CONTENT_TYPES[ext] || 'video/mp4', art });
+    ctx.map.set(id, { id, parentId: node.id, container: false, title: config.titles[rel] || base, file: fp, contentType: MEDIA_TYPES[ext] || 'video/mp4', kind: mediaKind(ext, rel), art });
     node.children.push(id);
   }
 }
@@ -320,16 +338,25 @@ function pageHTML(libraryName) {
   #overlay video{max-width:90vw;max-height:72vh;background:#000;border-radius:8px}
   #overlay .row{display:flex;gap:10px;align-items:center}
   #ptitle{color:#f5e9cf;font-family:'Cormorant Garamond',Georgia,serif;font-size:24px}
+  /* content-type filter chips (the unified hub) */
+  #types{display:flex;gap:6px;flex-wrap:wrap}
+  #types .tchip{font:inherit;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:20px;padding:7px 13px;cursor:pointer}
+  #types .tchip.on{background:var(--accent);color:#fff}
+  .card.music .thumb,.card.podcast .thumb{aspect-ratio:1/1}
+  #podRoot{padding:22px 24px;max-width:1100px;margin:0 auto}
+${podcasts.podcastCSS()}
 </style></head><body>
 <header>
   <h1>Casto</h1>
   <div id="crumbs"></div>
+  <div id="types"></div>
   <input id="q" placeholder="Search library…" style="margin-left:auto">
   <select id="sort"><option value="name-asc">A → Z</option><option value="name-desc">Z → A</option></select>
   <button class="ghost" id="reindexBtn" style="color:var(--accent);border-color:var(--accent)" title="Rescan the drive for changes">↻ Rescan</button>
   <button class="ghost" id="npBtn" style="color:var(--accent);border-color:var(--accent)">▶ Now Playing</button>
 </header>
 <div id="grid"></div>
+<div id="podRoot" style="display:none"></div>
 
 <aside id="finder">
   <div class="frow"><div id="finderTitle"></div><button class="ghost" id="finderClose" style="color:var(--accent);border-color:var(--accent)">Close</button></div>
@@ -370,7 +397,8 @@ let current = '0';
 let finderItem = null;
 function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
 
-let lastItems = [], lastCrumb = [], sortMode = 'name-asc';
+let lastItems = [], lastCrumb = [], sortMode = 'name-asc', typeFilter = 'all';
+const KIND_ICON = { folder:'📁', movie:'🎬', tv:'📺', music:'🎵' };
 
 async function browse(id){
   current = id;
@@ -384,8 +412,10 @@ async function search(query){
 }
 function sortItems(items){
   const dir = sortMode==='name-desc' ? -1 : 1;
+  // Folders are navigation containers — always shown. Leaf items filter by the
+  // selected content-type (Movies / TV / Music); "all" shows everything.
   const folders = items.filter(x=>x.type==='folder').sort((a,b)=>a.title.localeCompare(b.title)*dir);
-  const vids = items.filter(x=>x.type!=='folder').sort((a,b)=>a.title.localeCompare(b.title)*dir);
+  const vids = items.filter(x=>x.type!=='folder' && (typeFilter==='all' || x.kind===typeFilter)).sort((a,b)=>a.title.localeCompare(b.title)*dir);
   return [...folders, ...vids];
 }
 function renderItems(items, breadcrumb){
@@ -399,10 +429,10 @@ function renderItems(items, breadcrumb){
 }
 function makeCard(it){
   const card = document.createElement('div');
-  card.className = 'card' + (it.type==='folder'?' folder':'');
+  card.className = 'card' + (it.type==='folder'?' folder':'') + (it.kind && it.kind!=='folder' ? ' '+it.kind : '');
   const thumb = document.createElement('div');
   thumb.className='thumb';
-  const fallback = it.type==='folder' ? '📁' : '🎬';
+  const fallback = it.type==='folder' ? '📁' : (KIND_ICON[it.kind] || '🎬');
   if(it.poster){
     const img=document.createElement('img'); img.src=it.poster; img.loading='lazy';
     img.onerror=()=>{ img.remove(); if(!thumb.textContent) thumb.textContent=fallback; };
@@ -606,8 +636,40 @@ async function refreshNP(){
   }
 }
 
+// --- Content-type filter chips (the unified hub) ---------------------------
+// Movies / TV / Music filter the local file grid by kind; Podcasts swaps the
+// grid for the shared podcast widget (RSS subscribe, directory search, player).
+const TYPES = [['all','All'],['movie','🎬 Movies'],['tv','📺 TV'],['music','🎵 Music'],['podcasts','🎙 Podcasts']];
+let podMounted = false;
+function setType(kind){
+  typeFilter = kind;
+  document.querySelectorAll('#types .tchip').forEach(b=>b.classList.toggle('on', b.dataset.kind===kind));
+  const podView = kind==='podcasts';
+  // Library-only controls are meaningless in the podcast view.
+  for(const id of ['q','sort','reindexBtn','npBtn']){ const el=document.getElementById(id); if(el) el.style.display = podView?'none':''; }
+  document.getElementById('grid').style.display = podView?'none':'';
+  document.getElementById('podRoot').style.display = podView?'block':'none';
+  document.getElementById('crumbs').style.display = podView?'none':'';
+  if(podView){
+    if(!podMounted){ CastoPod.mount(document.getElementById('podRoot'), { apiPrefix:'/api/pod' }); podMounted=true; }
+  } else {
+    renderItems(lastItems, lastCrumb); // re-apply the kind filter to the grid
+  }
+}
+(function(){
+  const wrap=document.getElementById('types');
+  for(const [kind,label] of TYPES){
+    const b=document.createElement('button');
+    b.className='tchip'+(kind==='all'?' on':''); b.dataset.kind=kind; b.textContent=label;
+    b.onclick=()=>setType(kind);
+    wrap.appendChild(b);
+  }
+})();
+
 browse('0');
 </script>
+${podcasts.podcastDockHTML()}
+<script>${podcasts.podcastClientJS()}</script>
 </body></html>`;
 }
 
@@ -632,6 +694,7 @@ async function main() {
   const host = get('--host', localIPv4()) || '127.0.0.1';
   const port = parseInt(get('--port', '8010'), 10);
   preventSleep();
+  podcasts.ensureDirs(); // podcast subscriptions/downloads live under ~/.casto
 
   // State (title overrides, removed folders) AND the index cache live in HOME,
   // keyed by the library path — NOT on the drive. So an unplugged drive (or a
@@ -740,6 +803,11 @@ async function main() {
     try {
       if (p === '/') { const html = pageHTML(name); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(html); }
 
+      // Podcasts content-type: the shared podcast engine, mounted under /api/pod
+      if (p.startsWith('/api/pod/')) {
+        if (await podcasts.handlePodcastRoutes(req, res, u, json, '/api/pod')) return;
+      }
+
       if (p === '/api/browse') {
         const node = objects.get(u.searchParams.get('id') || '0');
         if (!node) return json(res, 404, { ok: false });
@@ -749,7 +817,7 @@ async function main() {
           // Videos always get an /art URL (sidecar art, or 404 → UI fallback).
           const poster = c.art || !c.container ? `/art/${c.id}` : null;
           const available = c.container ? !c.unavailable : !node.unavailable;
-          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', poster, available };
+          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', kind: c.container ? 'folder' : (c.kind || 'movie'), poster, available };
         });
         return json(res, 200, { ok: true, folder: { id: node.id, title: node.title }, breadcrumb: breadcrumb(objects, node.id), items });
       }
@@ -767,7 +835,7 @@ async function main() {
             if (n.container || n.id === '0') continue;
             if (n.title.toLowerCase().includes(query)) {
               const parent = objects.get(n.parentId);
-              items.push({ id: n.id, title: n.title, type: 'video', poster: `/art/${n.id}`, available: parent ? !parent.unavailable : true });
+              items.push({ id: n.id, title: n.title, type: 'video', kind: n.kind || 'movie', poster: `/art/${n.id}`, available: parent ? !parent.unavailable : true });
             }
           }
         }

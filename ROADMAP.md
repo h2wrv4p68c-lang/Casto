@@ -54,6 +54,21 @@ Browse a whole folder, with posters — the Plex-style aspect.
 - ✅ Packaging: bundle Node, arm64, Developer-ID sign + notarize + staple
 - ⬜ Confirmed build on a real Mac
 
+## M1.5 — Unified media hub ✅
+The Library becomes a multi-type front door, not just movies.
+- ✅ Content-type classification on scan: audio → Music; video → TV if it looks
+     episodic (SxxExx / "Season N" / 1x02 / "Episode N"), else Movie (heuristic,
+     no metadata provider)
+- ✅ Header filter chips: All · Movies · TV · Music · Podcasts; cards render at
+     the right aspect per kind (2:3 video posters vs 1:1 square art)
+- ✅ Podcasts mounted in the hub via the shared engine (podcast-core.js) under
+     /api/pod — same subscribe / search / resume / speed / offline as standalone
+- ✅ podcast-core.js: one engine + one browser widget (CastoPod.mount) shared by
+     both the standalone app and the hub (no duplication)
+- ⬜ Folder-level kind inference (folders currently always show; leaves filter)
+- ⬜ Music metadata (album/artist grouping) + audiobook chapters
+- ⬜ Movie-vs-TV via a metadata provider instead of filename heuristics
+
 ## M2.5 — Podcasts ✅ (standalone)
 A self-contained podcast app (`podcasts.js`) in the Casto family theme — no
 account, no DB, no deps. State lives in ~/.casto (subs, progress, downloads).
