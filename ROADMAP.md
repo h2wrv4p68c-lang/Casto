@@ -54,6 +54,19 @@ Browse a whole folder, with posters — the Plex-style aspect.
 - ✅ Packaging: bundle Node, arm64, Developer-ID sign + notarize + staple
 - ⬜ Confirmed build on a real Mac
 
+## M2.5 — Podcasts ✅ (standalone)
+A self-contained podcast app (`podcasts.js`) in the Casto family theme — no
+account, no DB, no deps. State lives in ~/.casto (subs, progress, downloads).
+- ✅ Subscribe by RSS feed URL (tolerant, dependency-free feed parser)
+- ✅ Find shows via the public directory (iTunes Search API, proxied — no key)
+- ✅ In-browser player dock: resume-where-you-left-off (persisted position),
+     variable speed (0.8×–2×), 15s back / 30s forward, seek bar
+- ✅ Offline download (server-side fetch to ~/.casto/podcast-downloads),
+     played back locally with Range
+- ✅ Audio proxied with Range forwarding so seeking works on any host
+- ⬜ Cast-to-TV/speaker hook (reuse casto.js — currently standalone by design)
+- ⬜ OPML import/export of subscriptions
+
 ## M3 — Brand ✅
 - ✅ New England light-wood wordmark (Cormorant) + monogram app icon
 

@@ -5,12 +5,14 @@
   "bin": {
     "casto": "casto.js",
     "casto-serve": "server.js",
-    "casto-ctl": "casto-ctl.js"
+    "casto-ctl": "casto-ctl.js",
+    "casto-podcasts": "podcasts.js"
   },
   "scripts": {
     "start": "node casto.js",
     "serve": "node server.js",
     "library": "node library.js",
+    "podcasts": "node podcasts.js",
     "castd": "node castd.js",
     "ctl": "node casto-ctl.js",
     "menubar": "swift menubar.swift"
