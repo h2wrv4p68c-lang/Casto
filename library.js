@@ -58,9 +58,25 @@ const POSTER_NAMES = ['poster', 'folder', 'cover', 'thumb'];
 // else movie. It's a heuristic — no metadata provider — but a good-enough split
 // for filter chips. Podcasts are a separate, feed-sourced kind (not files).
 const TV_PATTERN = /\bS\d{1,2}\s?E\d{1,2}\b|\b\d{1,2}x\d{2}\b|\bseason\s*\d+\b|\bepisode\s*\d+\b/i;
+
+// Pull {season, episode} out of a name. Handles SxxExx (and ranges like
+// S01E02E03 → first), 1x02, "Season 1 … Episode 2", and a bare "Episode 2"
+// (season 0). Returns null when nothing episodic is found.
+function episodeInfo(name) {
+  let m = name.match(/\bS(\d{1,3})\s?E(\d{1,3})(?:\s?E\d{1,3})?\b/i);
+  if (m) return { season: +m[1], episode: +m[2] };
+  m = name.match(/\b(\d{1,2})x(\d{2,3})\b/);
+  if (m) return { season: +m[1], episode: +m[2] };
+  m = name.match(/season\s*(\d{1,3})[^]*?episode\s*(\d{1,3})/i);
+  if (m) return { season: +m[1], episode: +m[2] };
+  m = name.match(/\bep(?:isode)?\.?\s?(\d{1,3})\b/i);
+  if (m) return { season: 0, episode: +m[1] };
+  return null;
+}
+
 function mediaKind(ext, relPath) {
   if (AUDIO_EXTS.includes(ext)) return 'music';
-  return TV_PATTERN.test(relPath) ? 'tv' : 'movie';
+  return (episodeInfo(relPath) || TV_PATTERN.test(relPath)) ? 'tv' : 'movie';
 }
 
 function localIPv4() {
@@ -129,7 +145,10 @@ async function scanDirInto(ctx, node, root, config) {
     for (const ie of IMAGE_EXTS) if (fileNames.has(base + ie)) { art = path.join(node.path, base + ie); break; }
     if (!art) art = node.art; // fall back to the folder poster
     const id = String(ctx.nextId++);
-    ctx.map.set(id, { id, parentId: node.id, container: false, title: config.titles[rel] || base, file: fp, contentType: MEDIA_TYPES[ext] || 'video/mp4', kind: mediaKind(ext, rel), art });
+    const kind = mediaKind(ext, rel);
+    // Detect season/episode from the filename first, then the folder path.
+    const epi = kind === 'tv' ? (episodeInfo(f.name) || episodeInfo(rel)) : null;
+    ctx.map.set(id, { id, parentId: node.id, container: false, title: config.titles[rel] || base, file: fp, contentType: MEDIA_TYPES[ext] || 'video/mp4', kind, season: epi ? epi.season : undefined, episode: epi ? epi.episode : undefined, art });
     node.children.push(id);
   }
 }
@@ -343,6 +362,7 @@ function pageHTML(libraryName) {
   #types .tchip{font:inherit;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:20px;padding:7px 13px;cursor:pointer}
   #types .tchip.on{background:var(--accent);color:#fff}
   .card.music .thumb,.card.podcast .thumb{aspect-ratio:1/1}
+  .label .se{display:inline-block;background:var(--accent);color:#fff;font-size:11px;font-weight:600;padding:1px 6px;border-radius:5px;margin-right:6px;vertical-align:1px}
   #podRoot{padding:22px 24px;max-width:1100px;margin:0 auto}
 ${podcasts.podcastCSS()}
 </style></head><body>
@@ -377,10 +397,13 @@ ${podcasts.podcastCSS()}
 
 <div id="overlay">
   <div id="ptitle"></div>
+  <div id="upnext" style="color:#cdb98a;font-size:13px;min-height:16px"></div>
   <video id="player" controls style="object-fit:contain"></video>
   <div class="row">
     <button class="ghost" id="fsBtn">⛶ Fullscreen</button>
     <select id="fit"><option value="contain">Fit</option><option value="cover">Fill</option><option value="fill">Stretch</option></select>
+    <button class="ghost" id="nextBtn" title="Play the next episode">Next ▸</button>
+    <label style="color:#f5e9cf;font-size:13px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="autoplay" checked> Autoplay</label>
     <span style="flex:1"></span>
     <button class="ghost" id="closeBtn">Close</button>
   </div>
@@ -415,8 +438,20 @@ function sortItems(items){
   // Folders are navigation containers — always shown. Leaf items filter by the
   // selected content-type (Movies / TV / Music); "all" shows everything.
   const folders = items.filter(x=>x.type==='folder').sort((a,b)=>a.title.localeCompare(b.title)*dir);
-  const vids = items.filter(x=>x.type!=='folder' && (typeFilter==='all' || x.kind===typeFilter)).sort((a,b)=>a.title.localeCompare(b.title)*dir);
+  const vids = items.filter(x=>x.type!=='folder' && (typeFilter==='all' || x.kind===typeFilter)).sort((a,b)=>{
+    // Episodes order numerically by season then episode; everything else A→Z.
+    if(a.episode!=null && b.episode!=null) return (((a.season||0)-(b.season||0)) || (a.episode-b.episode))*dir;
+    return a.title.localeCompare(b.title)*dir;
+  });
   return [...folders, ...vids];
+}
+// "S1·E2" tag + a title with that token stripped (display only) to avoid
+// "S1·E2 — Show S01E02" redundancy.
+function seTag(it){ if(it.episode==null) return ''; return (it.season ? 'S'+it.season+'·' : '') + 'E'+it.episode; }
+function cleanTitle(it){
+  if(it.episode==null) return it.title;
+  return it.title.replace(/\bS\d{1,2}\s?E\d{1,3}\b/i,'').replace(/\b\d{1,2}x\d{2,3}\b/,'')
+    .replace(/^[\s\-_.]+|[\s\-_.]+$/g,'').replace(/\s{2,}/g,' ').trim() || it.title;
 }
 function renderItems(items, breadcrumb){
   lastItems = items; lastCrumb = breadcrumb;
@@ -466,7 +501,10 @@ function makeCard(it){
   ren.onclick=(e)=>{ e.stopPropagation(); rename(it); };
   thumb.appendChild(ren);
   const label = document.createElement('div');
-  label.className='label'; label.textContent = it.title;
+  label.className='label';
+  const tag = seTag(it);
+  if(tag){ label.innerHTML = '<span class="se">'+tag+'</span>'+esc(cleanTitle(it)); }
+  else { label.textContent = it.title; }
   card.appendChild(thumb); card.appendChild(label);
   card.onclick = () => {
     if(it.available===false){ return; }
@@ -535,17 +573,35 @@ document.getElementById('finderClose').onclick=closeFinder;
 
 // --- Inline player + cast (independent — casting is not a mirror) -----------
 let playingId = null;
+let playlist = [], playIndex = -1; // the ordered episodes/items for autoplay
 function play(it){ open(it, true); }
 function open(it, watchLocal){
   playingId = it.id;
+  // Build a playlist from the current grid (already season/episode ordered) so
+  // "Next" and autoplay step through episodes in sequence.
+  playlist = sortItems(lastItems).filter(x => x.type !== 'folder');
+  playIndex = playlist.findIndex(x => x.id === it.id);
   document.getElementById('ptitle').textContent = it.title;
   const v = document.getElementById('player');
   v.src = '/media/'+it.id;
   if(watchLocal){ v.play().catch(()=>{}); } else { v.pause(); }
   document.getElementById('caststatus').textContent = '';
   document.getElementById('overlay').style.display='flex';
+  updateUpNext();
   renderPlayOn(watchLocal);
 }
+function nextItem(){ return playIndex >= 0 ? playlist[playIndex+1] : null; }
+function updateUpNext(){
+  const n = nextItem();
+  const tag = n ? (seTag(n) ? seTag(n)+' — ' : '') : '';
+  document.getElementById('upnext').textContent = n ? ('Up next: ' + tag + cleanTitle(n)) : '';
+  document.getElementById('nextBtn').style.display = n ? '' : 'none';
+}
+function playNext(){ const n = nextItem(); if(n){ playIndex++; open(n, true); } }
+document.getElementById('nextBtn').onclick = playNext;
+document.getElementById('player').addEventListener('ended', () => {
+  if(document.getElementById('autoplay').checked) playNext();
+});
 document.getElementById('fsBtn').onclick = () => {
   const v=document.getElementById('player');
   if(document.fullscreenElement) document.exitFullscreen();
@@ -721,7 +777,7 @@ async function main() {
   const findByRel = (rel) => [...objects.values()].find((n) => n.id !== '0' && relOf(n) === rel);
   const maxId = () => [...objects.keys()].reduce((m, k) => Math.max(m, +k || 0), 0);
   const serialize = () => [...objects.values()].map((n) =>
-    ({ id: n.id, parentId: n.parentId, container: n.container, title: n.title, path: n.path, file: n.file, contentType: n.contentType, size: n.size, art: n.art, children: n.children, scanned: n.scanned }));
+    ({ id: n.id, parentId: n.parentId, container: n.container, title: n.title, path: n.path, file: n.file, contentType: n.contentType, kind: n.kind, season: n.season, episode: n.episode, size: n.size, art: n.art, children: n.children, scanned: n.scanned }));
   let saveTimer = null;
   const saveConfig = () => {
     clearTimeout(saveTimer);
@@ -836,7 +892,7 @@ async function main() {
           // Videos always get an /art URL (sidecar art, or 404 → UI fallback).
           const poster = c.art || !c.container ? `/art/${c.id}` : null;
           const available = c.container ? !c.unavailable : !node.unavailable;
-          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', kind: c.container ? 'folder' : (c.kind || 'movie'), poster, available };
+          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', kind: c.container ? 'folder' : (c.kind || 'movie'), season: c.season, episode: c.episode, poster, available };
         });
         return json(res, 200, { ok: true, folder: { id: node.id, title: node.title }, breadcrumb: breadcrumb(objects, node.id), items });
       }
@@ -854,7 +910,7 @@ async function main() {
             if (n.container || n.id === '0') continue;
             if (n.title.toLowerCase().includes(query)) {
               const parent = objects.get(n.parentId);
-              items.push({ id: n.id, title: n.title, type: 'video', kind: n.kind || 'movie', poster: `/art/${n.id}`, available: parent ? !parent.unavailable : true });
+              items.push({ id: n.id, title: n.title, type: 'video', kind: n.kind || 'movie', season: n.season, episode: n.episode, poster: `/art/${n.id}`, available: parent ? !parent.unavailable : true });
             }
           }
         }

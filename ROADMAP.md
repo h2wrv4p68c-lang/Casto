@@ -70,9 +70,20 @@ The Library becomes a multi-type front door, not just movies.
      renderer gets plain HTTP + Range even for HTTPS-CDN episodes; sessions show
      in Now Playing for transport. Per-episode + dock cast; standalone app stays
      cast-free by design
+- ✅ TV season/episode detection (SxxExx, ranges, 1x02, "Season N…Episode M",
+     bare "Episode N") from filename then folder path; season/episode persisted
+     in the index cache and surfaced in browse/search
+- ✅ Sequencing: episodes order numerically by season→episode (E2 before E10),
+     S·E badge on cards, and the inline player auto-advances to the next episode
+     (Autoplay toggle + "Next ▸" + "Up next:" indicator)
+- ⬜ Per-show detail/splash page (Plex/Jellyfin style): hero + season picker +
+     episode list (next up)
+- ⬜ "10-foot"/TV mode: D-pad/arrow-key focus nav so the UI is usable on a TV
+     browser with a remote
 - ⬜ Folder-level kind inference (folders currently always show; leaves filter)
 - ⬜ Music metadata (album/artist grouping) + audiobook chapters
 - ⬜ Movie-vs-TV via a metadata provider instead of filename heuristics
+- ⬜ Cast auto-advance (poll the renderer for "ended" → fling next episode)
 
 ## M2.5 — Podcasts ✅ (standalone)
 A self-contained podcast app (`podcasts.js`) in the Casto family theme — no
