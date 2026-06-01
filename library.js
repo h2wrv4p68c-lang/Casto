@@ -645,13 +645,14 @@ function setType(kind){
   typeFilter = kind;
   document.querySelectorAll('#types .tchip').forEach(b=>b.classList.toggle('on', b.dataset.kind===kind));
   const podView = kind==='podcasts';
-  // Library-only controls are meaningless in the podcast view.
-  for(const id of ['q','sort','reindexBtn','npBtn']){ const el=document.getElementById(id); if(el) el.style.display = podView?'none':''; }
+  // Library-only controls are meaningless in the podcast view (but keep Now
+  // Playing — it manages cast sessions, including flung podcasts).
+  for(const id of ['q','sort','reindexBtn']){ const el=document.getElementById(id); if(el) el.style.display = podView?'none':''; }
   document.getElementById('grid').style.display = podView?'none':'';
   document.getElementById('podRoot').style.display = podView?'block':'none';
   document.getElementById('crumbs').style.display = podView?'none':'';
   if(podView){
-    if(!podMounted){ CastoPod.mount(document.getElementById('podRoot'), { apiPrefix:'/api/pod' }); podMounted=true; }
+    if(!podMounted){ CastoPod.mount(document.getElementById('podRoot'), { apiPrefix:'/api/pod', castPrefix:'/api/pod' }); podMounted=true; }
   } else {
     renderItems(lastItems, lastCrumb); // re-apply the kind filter to the grid
   }
@@ -804,6 +805,24 @@ async function main() {
       if (p === '/') { const html = pageHTML(name); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(html); }
 
       // Podcasts content-type: the shared podcast engine, mounted under /api/pod
+      if (p === '/api/pod/devices') {
+        const list = await renderers();
+        return json(res, 200, { ok: true, devices: list.map((d) => ({ name: d.name })) });
+      }
+      if (p === '/api/pod/cast' && req.method === 'POST') {
+        const id = u.searchParams.get('id') || '';
+        const audioUrl = u.searchParams.get('url') || '';
+        const title = u.searchParams.get('title') || 'Podcast';
+        const target = u.searchParams.get('target');
+        const dev = (await renderers()).find((d) => d.name.toLowerCase().includes((target || '').toLowerCase()));
+        if (!dev) return json(res, 404, { ok: false, error: 'no matching device' });
+        // Cast our own proxied URL: the renderer then gets plain HTTP with Range
+        // from us, even when the episode lives on an HTTPS CDN behind redirects.
+        const url = `http://${host}:${port}/api/pod/audio?id=${encodeURIComponent(id)}` + (audioUrl ? `&url=${encodeURIComponent(audioUrl)}` : '');
+        await castTo(dev.controlURL, url, title, 'audio/mpeg');
+        castByDevice.set(dev.name, { controlURL: dev.controlURL, title });
+        return json(res, 200, { ok: true, device: dev.name });
+      }
       if (p.startsWith('/api/pod/')) {
         if (await podcasts.handlePodcastRoutes(req, res, u, json, '/api/pod')) return;
       }

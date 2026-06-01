@@ -402,6 +402,12 @@ function podcastCSS() {
   #podDock select{background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:6px 8px;font:inherit;cursor:pointer}
   #podDock button{font:inherit;background:var(--accent);color:#fff;border:0;border-radius:8px;cursor:pointer}
   #podDock button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  .pod-ep .ea button.cast{color:var(--accent)}
+  #podCastMenu{position:fixed;background:var(--card);border:1px solid var(--accent);border-radius:10px;box-shadow:0 6px 20px rgba(60,40,15,.3);padding:6px;z-index:60;display:none;min-width:180px}
+  #podCastMenu .ttl{font-size:12px;color:var(--sub);padding:4px 8px}
+  #podCastMenu button{display:block;width:100%;text-align:left;background:transparent;color:var(--ink);border:0;border-radius:6px;padding:8px 10px;font:inherit;cursor:pointer}
+  #podCastMenu button:hover{background:#efe2c4}
+  #podToast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:9px 16px;border-radius:20px;font-size:14px;z-index:70;display:none;box-shadow:0 4px 14px rgba(60,40,15,.3)}
   `;
 }
 
@@ -425,9 +431,12 @@ function podcastDockHTML() {
     <option value="1.25">1.25×</option><option value="1.5">1.5×</option>
     <option value="1.75">1.75×</option><option value="2">2×</option>
   </select>
+  <button id="pdCast" class="ghost" title="Cast to a TV or speaker" style="display:none">📺 Cast</button>
   <button id="pdClose" class="ghost" title="Close">✕</button>
   <audio id="podAudio"></audio>
-</div>`;
+</div>
+<div id="podCastMenu"></div>
+<div id="podToast"></div>`;
 }
 
 function podcastClientJS() {
@@ -438,9 +447,46 @@ function podcastClientJS() {
   const fmtDate = (d) => { const t = Date.parse(d); return isNaN(t) ? '' : new Date(t).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); };
 
   let API = '/api';
+  let CAST = null; // cast route prefix; null in the standalone app (no casting)
   const api = async (path, opts) => (await fetch(API + path, opts)).json();
 
   let root = null, content = null, view = 'subs', current = null;
+
+  // --- Flinging (cast to a TV / speaker) -----------------------------------
+  function toast(msg){
+    const t = document.getElementById('podToast'); if (!t) return;
+    t.textContent = msg; t.style.display = 'block';
+    clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, 2600);
+  }
+  function chooseDevice(devs, anchor){
+    return new Promise((resolve) => {
+      const menu = document.getElementById('podCastMenu');
+      menu.innerHTML = '<div class="ttl">Cast to…</div>' + devs.map((d,i) => '<button data-i="'+i+'">📺 '+esc(d.name)+'</button>').join('');
+      const r = anchor.getBoundingClientRect();
+      menu.style.display = 'block';
+      menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+      menu.style.top = Math.max(8, r.top - menu.offsetHeight - 8) + 'px';
+      const close = (val) => { menu.style.display = 'none'; document.removeEventListener('mousedown', onDoc, true); resolve(val); };
+      const onDoc = (e) => { if (!menu.contains(e.target)) close(null); };
+      menu.querySelectorAll('button').forEach(b => b.onclick = () => close(devs[+b.dataset.i].name));
+      setTimeout(() => document.addEventListener('mousedown', onDoc, true), 0);
+    });
+  }
+  async function castEpisode(ep, anchor){
+    if (!CAST) return;
+    let r; try { r = await (await fetch(CAST + '/devices')).json(); } catch(_) { r = {}; }
+    const devs = r.devices || [];
+    if (!devs.length){ toast('No TVs or speakers found on the network'); return; }
+    const pick = devs.length === 1 ? devs[0].name : await chooseDevice(devs, anchor);
+    if (!pick) return;
+    const q = '?id=' + encodeURIComponent(ep.id) + (ep.audioUrl ? '&url=' + encodeURIComponent(ep.audioUrl) : '') +
+              '&title=' + encodeURIComponent(ep.title || 'Podcast') + '&target=' + encodeURIComponent(pick);
+    let res; try { res = await (await fetch(CAST + '/cast' + q, { method:'POST' })).json(); } catch(_) { res = {}; }
+    if (res.ok){
+      toast('Casting to ' + res.device + ' — control it from “Now Playing”');
+      try { document.getElementById('podAudio').pause(); } catch(_) {} // avoid double audio
+    } else toast(res.error || 'Cast failed');
+  }
 
   function showCard(s){
     const art = s.image ? '<img src="'+esc(s.image)+'" alt="" loading="lazy">' : '🎙';
@@ -534,7 +580,8 @@ function podcastClientJS() {
       '<div class="ed">'+esc(e.description||'')+'</div>' +
       (pct ? '<div class="pod-bar"><i style="width:'+pct+'%"></i></div>' : '') +
       '<div class="ea">' +
-        '<button class="play">'+(resume ? '▶ Resume' : '▶ Play')+'</button>' + pills +
+        '<button class="play">'+(resume ? '▶ Resume' : '▶ Play')+'</button>' +
+        (CAST ? '<button class="ghost cast">📺 Cast</button>' : '') + pills +
         (e.downloaded ? '<button class="ghost rmdl">Remove download</button>' :
           (e.downloading ? '<button class="ghost dlbtn" disabled><span class="pod-spin"></span> Downloading…</button>' : '<button class="ghost dlbtn">⤓ Download</button>')) +
       '</div></div>';
@@ -545,6 +592,8 @@ function podcastClientJS() {
       const id = row.dataset.id;
       const e = f.episodes.find(x => x.id === id);
       row.querySelector('.play').onclick = () => playEpisode(e, f);
+      const cb = row.querySelector('.cast');
+      if (cb) cb.onclick = () => castEpisode({ id:e.id, audioUrl:e.audioUrl, title:e.title }, cb);
       const dl = row.querySelector('.dlbtn');
       if (dl) dl.onclick = async () => {
         dl.disabled = true; dl.innerHTML = '<span class="pod-spin"></span> Downloading…';
@@ -569,11 +618,14 @@ function podcastClientJS() {
     if (!r.downloads.length){ content.innerHTML = '<div class="pod-empty">No downloaded episodes yet.<br><span class="muted">Open a show and tap ⤓ Download to save one for offline.</span></div>'; return; }
     content.innerHTML = '<h2 style="font-family:Cormorant Garamond,Georgia,serif">Downloaded episodes</h2>' +
       r.downloads.map(d => '<div class="pod-ep" data-id="'+esc(d.id)+'"><div class="et">'+esc(d.title)+'</div>' +
-        '<div class="ea"><button class="play">▶ Play offline</button><span class="pod-pill dl">✓ Offline</span><button class="ghost rmdl">Remove</button></div></div>').join('');
+        '<div class="ea"><button class="play">▶ Play offline</button>' + (CAST ? '<button class="ghost cast">📺 Cast</button>' : '') +
+        '<span class="pod-pill dl">✓ Offline</span><button class="ghost rmdl">Remove</button></div></div>').join('');
     content.querySelectorAll('.pod-ep').forEach(row => {
       const id = row.dataset.id;
       const d = r.downloads.find(x => x.id === id);
       row.querySelector('.play').onclick = () => playEpisode({ id, title:d.title, audioUrl:'', image:'' }, { title:'Downloaded' });
+      const cb = row.querySelector('.cast');
+      if (cb) cb.onclick = () => castEpisode({ id, audioUrl:'', title:d.title }, cb);
       row.querySelector('.rmdl').onclick = async () => { await api('/download/remove', { method:'POST', body: JSON.stringify({ id }) }); renderDownloads(); };
     });
   }
@@ -605,6 +657,7 @@ function podcastClientJS() {
     $('pdFwd').onclick  = () => audio.currentTime = Math.min(audio.duration||1e9, audio.currentTime + 30);
     $('pdSeek').oninput = () => { if (audio.duration) audio.currentTime = audio.duration * $('pdSeek').value / 1000; };
     $('pdSpeed').onchange = () => audio.playbackRate = parseFloat($('pdSpeed').value);
+    $('pdCast').onclick = () => { if (current) castEpisode(current, $('pdCast')); };
     $('pdClose').onclick = () => { saveProgress(); audio.pause(); audio.src=''; dock.style.display='none'; current=null; };
     window.addEventListener('beforeunload', saveProgress);
   }
@@ -629,6 +682,7 @@ function podcastClientJS() {
   function mount(rootEl, opts){
     opts = opts || {};
     API = opts.apiPrefix || '/api';
+    CAST = opts.castPrefix || null;
     root = rootEl;
     view = 'subs';
     root.classList.add('pod');
@@ -641,6 +695,7 @@ function podcastClientJS() {
     content = root.querySelector('.pod-content');
     root.querySelectorAll('.pod-nav button').forEach(b => b.onclick = () => { view = b.dataset.pview; render(); });
     ensureDock();
+    const castBtn = document.getElementById('pdCast'); if (castBtn) castBtn.style.display = CAST ? '' : 'none';
     render();
   }
 

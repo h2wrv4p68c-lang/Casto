@@ -65,6 +65,11 @@ The Library becomes a multi-type front door, not just movies.
      /api/pod — same subscribe / search / resume / speed / offline as standalone
 - ✅ podcast-core.js: one engine + one browser widget (CastoPod.mount) shared by
      both the standalone app and the hub (no duplication)
+- ✅ Flinging audio: cast podcast episodes (and local music, via the existing
+     caster) to a DLNA TV/speaker. Podcasts cast our own proxied URL so the
+     renderer gets plain HTTP + Range even for HTTPS-CDN episodes; sessions show
+     in Now Playing for transport. Per-episode + dock cast; standalone app stays
+     cast-free by design
 - ⬜ Folder-level kind inference (folders currently always show; leaves filter)
 - ⬜ Music metadata (album/artist grouping) + audiobook chapters
 - ⬜ Movie-vs-TV via a metadata provider instead of filename heuristics
