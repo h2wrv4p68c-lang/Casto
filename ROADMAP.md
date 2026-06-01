@@ -76,8 +76,10 @@ The Library becomes a multi-type front door, not just movies.
 - ✅ Sequencing: episodes order numerically by season→episode (E2 before E10),
      S·E badge on cards, and the inline player auto-advances to the next episode
      (Autoplay toggle + "Next ▸" + "Up next:" indicator)
-- ⬜ Per-show detail/splash page (Plex/Jellyfin style): hero + season picker +
-     episode list (next up)
+- ✅ Per-show detail/splash page (Plex/Jellyfin style): opening a show folder
+     shows a hero + season picker + episode list; episodes Play (autoplay-next
+     within the season) or Cast to a TV. Works for flat folders and Season/*
+     subfolders; /api/show aggregates either into season-grouped episodes
 - ⬜ "10-foot"/TV mode: D-pad/arrow-key focus nav so the UI is usable on a TV
      browser with a remote
 - ⬜ Folder-level kind inference (folders currently always show; leaves filter)

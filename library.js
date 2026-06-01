@@ -363,6 +363,22 @@ function pageHTML(libraryName) {
   #types .tchip.on{background:var(--accent);color:#fff}
   .card.music .thumb,.card.podcast .thumb{aspect-ratio:1/1}
   .label .se{display:inline-block;background:var(--accent);color:#fff;font-size:11px;font-weight:600;padding:1px 6px;border-radius:5px;margin-right:6px;vertical-align:1px}
+  /* show detail / splash page (Plex/Jellyfin style) */
+  #grid.show{display:block}
+  .hero{display:flex;gap:22px;align-items:flex-start;margin-bottom:6px}
+  .hero .poster{width:170px;height:255px;object-fit:cover;border-radius:12px;background:#d8c191;flex:none;display:flex;align-items:center;justify-content:center;font-size:60px;color:#a07e4e;box-shadow:0 3px 10px rgba(60,40,15,.22)}
+  .hero h2{font-family:'Cormorant Garamond',Georgia,serif;font-size:38px;margin:0 0 6px;line-height:1.05}
+  .hero .meta{color:var(--sub);font-size:14px;letter-spacing:.04em}
+  .hero .seasons{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
+  .schip{font:inherit;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:20px;padding:7px 15px;cursor:pointer}
+  .schip.on{background:var(--accent);color:#fff}
+  .eplist{margin-top:18px;max-width:880px}
+  .eprow{display:flex;align-items:center;gap:14px;background:var(--card);border-radius:10px;padding:11px 15px;margin-top:9px;box-shadow:0 1px 4px rgba(60,40,15,.12)}
+  .eprow .num{font-variant-numeric:tabular-nums;font-weight:700;color:var(--accent);min-width:38px;text-align:center;font-size:15px}
+  .eprow .ttl{flex:1;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .eprow .seen{font-size:11px;color:var(--sub);border:1px solid var(--line,#c9ac74);border-radius:20px;padding:1px 8px}
+  .eprow button{padding:7px 13px;font-size:13px;border-radius:8px}
+  .eprow button.castb{background:transparent;color:var(--accent);border:1px solid var(--accent)}
   #podRoot{padding:22px 24px;max-width:1100px;margin:0 auto}
 ${podcasts.podcastCSS()}
 </style></head><body>
@@ -421,12 +437,17 @@ let finderItem = null;
 function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
 
 let lastItems = [], lastCrumb = [], sortMode = 'name-asc', typeFilter = 'all';
+let queue = null; // explicit ordered playlist (set when playing from a show page)
 const KIND_ICON = { folder:'📁', movie:'🎬', tv:'📺', music:'🎵' };
 
 async function browse(id){
-  current = id;
+  current = id; queue = null;
   const q = document.getElementById('q'); if(q) q.value='';
   const data = await (await fetch('/api/browse?id='+encodeURIComponent(id))).json();
+  // A folder is "show-like" if it holds episodes directly or has Season subs.
+  const eps = data.items.filter(x => x.kind==='tv' && x.episode!=null);
+  const seasonSubs = data.items.filter(x => x.type==='folder' && /^(season|series|specials|s\d)/i.test(x.title));
+  if(id!=='0' && (eps.length || seasonSubs.length)) return renderShow(id, data.breadcrumb);
   renderItems(data.items, data.breadcrumb);
 }
 async function search(query){
@@ -453,8 +474,59 @@ function cleanTitle(it){
   return it.title.replace(/\bS\d{1,2}\s?E\d{1,3}\b/i,'').replace(/\b\d{1,2}x\d{2,3}\b/,'')
     .replace(/^[\s\-_.]+|[\s\-_.]+$/g,'').replace(/\s{2,}/g,' ').trim() || it.title;
 }
+// --- Show detail / splash page (pick season + episode, then play or cast) ---
+async function renderShow(id, breadcrumb){
+  let r; try{ r = await (await fetch('/api/show?id='+encodeURIComponent(id))).json(); }catch(_){ r={}; }
+  if(!r.ok || !r.show || !r.show.total){
+    // Not actually a show — fall back to the normal grid.
+    const data = await (await fetch('/api/browse?id='+encodeURIComponent(id))).json();
+    return renderItems(data.items, data.breadcrumb);
+  }
+  const show = r.show;
+  lastCrumb = breadcrumb || r.breadcrumb;
+  document.getElementById('crumbs').innerHTML = (lastCrumb||[]).map(c => '<a onclick="browse(\\''+c.id+'\\')">'+esc(c.title)+'</a>').join(' › ');
+  const grid = document.getElementById('grid');
+  grid.className = 'show';
+  const seasonLabel = (s) => s===0 ? 'Specials' : 'Season '+s;
+  grid.innerHTML =
+    '<div class="hero">' +
+      '<div class="poster" id="showPoster">📺</div>' +
+      '<div><h2>'+esc(show.title)+'</h2>' +
+      '<div class="meta">'+show.seasons.length+' season'+(show.seasons.length>1?'s':'')+' · '+show.total+' episodes</div>' +
+      '<div class="seasons" id="seasonTabs"></div></div>' +
+    '</div><div class="eplist" id="eplist"></div>';
+  if(show.art){
+    const p=document.getElementById('showPoster'); const img=new Image();
+    img.src=show.art; img.style.cssText='width:100%;height:100%;object-fit:cover;border-radius:12px';
+    img.onload=()=>{ p.textContent=''; p.appendChild(img); };
+  }
+  const tabs=document.getElementById('seasonTabs');
+  show.seasons.forEach((s,i)=>{
+    const b=document.createElement('button');
+    b.className='schip'+(i===0?' on':''); b.textContent=seasonLabel(s.season);
+    b.onclick=()=>{ tabs.querySelectorAll('.schip').forEach(x=>x.classList.remove('on')); b.classList.add('on'); renderSeason(s); };
+    tabs.appendChild(b);
+  });
+  renderSeason(show.seasons[0]);
+}
+function renderSeason(s){
+  const list=document.getElementById('eplist'); list.innerHTML='';
+  for(const ep of s.episodes){
+    const row=document.createElement('div'); row.className='eprow';
+    const num=document.createElement('div'); num.className='num'; num.textContent = ep.episode!=null ? ('E'+ep.episode) : '–';
+    const ttl=document.createElement('div'); ttl.className='ttl'; ttl.textContent = cleanTitle(ep) || ep.title;
+    const playB=document.createElement('button'); playB.textContent='▶ Play';
+    playB.onclick=()=>{ queue = s.episodes.slice(); open(ep, true); };
+    const castB=document.createElement('button'); castB.className='castb'; castB.textContent='📺 Cast';
+    castB.onclick=()=>{ queue = s.episodes.slice(); open(ep, false); };
+    row.appendChild(num); row.appendChild(ttl); row.appendChild(playB); row.appendChild(castB);
+    list.appendChild(row);
+  }
+}
+
 function renderItems(items, breadcrumb){
   lastItems = items; lastCrumb = breadcrumb;
+  document.getElementById('grid').className = '';
   document.getElementById('crumbs').innerHTML = breadcrumb
     ? breadcrumb.map(c => '<a onclick="browse(\\''+c.id+'\\')">'+esc(c.title)+'</a>').join(' › ')
     : '<a onclick="browse(\\'0\\')">Library</a> › search results';
@@ -577,9 +649,9 @@ let playlist = [], playIndex = -1; // the ordered episodes/items for autoplay
 function play(it){ open(it, true); }
 function open(it, watchLocal){
   playingId = it.id;
-  // Build a playlist from the current grid (already season/episode ordered) so
-  // "Next" and autoplay step through episodes in sequence.
-  playlist = sortItems(lastItems).filter(x => x.type !== 'folder');
+  // Playlist for "Next"/autoplay: an explicit queue from a show-page season if
+  // we have one, else the current grid (already season/episode ordered).
+  playlist = queue ? queue.slice() : sortItems(lastItems).filter(x => x.type !== 'folder');
   playIndex = playlist.findIndex(x => x.id === it.id);
   document.getElementById('ptitle').textContent = it.title;
   const v = document.getElementById('player');
@@ -895,6 +967,35 @@ async function main() {
           return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', kind: c.container ? 'folder' : (c.kind || 'movie'), season: c.season, episode: c.episode, poster, available };
         });
         return json(res, 200, { ok: true, folder: { id: node.id, title: node.title }, breadcrumb: breadcrumb(objects, node.id), items });
+      }
+
+      // Aggregate a folder into a Plex/Jellyfin-style show: episodes grouped by
+      // season, whether they sit directly in the folder or inside Season/* subs.
+      if (p === '/api/show') {
+        const node = objects.get(u.searchParams.get('id') || '');
+        if (!node || !node.container) return json(res, 404, { ok: false });
+        await ensureScanned(node);
+        const seasons = new Map(); // season# -> [episodes]
+        const addEp = (c, fallbackSeason) => {
+          if (!c || c.container || c.kind !== 'tv') return;
+          const s = c.season != null ? c.season : (fallbackSeason != null ? fallbackSeason : 1);
+          if (!seasons.has(s)) seasons.set(s, []);
+          seasons.get(s).push({ id: c.id, title: c.title, season: c.season, episode: c.episode, poster: `/art/${c.id}` });
+        };
+        for (const cid of node.children || []) {
+          const c = objects.get(cid);
+          if (!c) continue;
+          if (c.container) {
+            await ensureScanned(c); // a Season subfolder — pull its episodes up
+            const sm = /\bseason\s*(\d+)\b/i.exec(c.title) || /\bs(\d+)\b/i.exec(c.title);
+            const fb = /special/i.test(c.title) ? 0 : (sm ? +sm[1] : null);
+            for (const gid of c.children || []) addEp(objects.get(gid), fb);
+          } else addEp(c);
+        }
+        const out = [...seasons.entries()].sort((a, b) => a[0] - b[0])
+          .map(([season, eps]) => ({ season, episodes: eps.sort((x, y) => (x.episode || 0) - (y.episode || 0)) }));
+        const total = out.reduce((n, s) => n + s.episodes.length, 0);
+        return json(res, 200, { ok: true, show: { id: node.id, title: node.title, art: node.art ? `/art/${node.id}` : null, seasons: out, total }, breadcrumb: breadcrumb(objects, node.id) });
       }
 
       if (p === '/api/reindex' && req.method === 'POST') {
