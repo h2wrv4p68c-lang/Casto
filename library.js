@@ -373,7 +373,13 @@ function pageHTML(libraryName) {
   .schip{font:inherit;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:20px;padding:7px 15px;cursor:pointer}
   .schip.on{background:var(--accent);color:#fff}
   .eplist{margin-top:18px;max-width:880px}
-  .eprow{display:flex;align-items:center;gap:14px;background:var(--card);border-radius:10px;padding:11px 15px;margin-top:9px;box-shadow:0 1px 4px rgba(60,40,15,.12)}
+  .eprow{display:flex;align-items:center;flex-wrap:wrap;gap:14px;background:var(--card);border-radius:10px;padding:11px 15px;margin-top:9px;box-shadow:0 1px 4px rgba(60,40,15,.12)}
+  .eprow.done .num{color:#2f6b3a}
+  .eprow .erbar{flex-basis:100%;height:4px;background:#e0cfa6;border-radius:3px;overflow:hidden}
+  .eprow .erbar>i{display:block;height:100%;background:var(--accent)}
+  .heroplay{margin-top:16px;display:flex;gap:10px;align-items:center}
+  .thumb .pbar{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(20,12,4,.35)}
+  .thumb .pbar>i{display:block;height:100%;background:var(--accent)}
   .eprow .num{font-variant-numeric:tabular-nums;font-weight:700;color:var(--accent);min-width:38px;text-align:center;font-size:15px}
   .eprow .ttl{flex:1;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .eprow .seen{font-size:11px;color:var(--sub);border:1px solid var(--line,#c9ac74);border-radius:20px;padding:1px 8px}
@@ -493,6 +499,7 @@ async function renderShow(id, breadcrumb){
       '<div class="poster" id="showPoster">📺</div>' +
       '<div><h2>'+esc(show.title)+'</h2>' +
       '<div class="meta">'+show.seasons.length+' season'+(show.seasons.length>1?'s':'')+' · '+show.total+' episodes</div>' +
+      '<div class="heroplay" id="heroPlayWrap"></div>' +
       '<div class="seasons" id="seasonTabs"></div></div>' +
     '</div><div class="eplist" id="eplist"></div>';
   if(show.art){
@@ -501,25 +508,52 @@ async function renderShow(id, breadcrumb){
     img.onload=()=>{ p.textContent=''; p.appendChild(img); };
   }
   const tabs=document.getElementById('seasonTabs');
+  const selectSeason=(s,btn)=>{ tabs.querySelectorAll('.schip').forEach(x=>x.classList.remove('on')); btn.classList.add('on'); renderSeason(s); };
+  const tabBtns=[];
   show.seasons.forEach((s,i)=>{
     const b=document.createElement('button');
     b.className='schip'+(i===0?' on':''); b.textContent=seasonLabel(s.season);
-    b.onclick=()=>{ tabs.querySelectorAll('.schip').forEach(x=>x.classList.remove('on')); b.classList.add('on'); renderSeason(s); };
-    tabs.appendChild(b);
+    b.onclick=()=>selectSeason(s,b);
+    tabs.appendChild(b); tabBtns.push(b);
   });
+  // Hero "Play"/"Resume": jump to the in-progress episode, else first unwatched.
+  const target=pickResume(show);
+  const hp=document.getElementById('heroPlayWrap');
+  if(target){
+    const pr=target.ep.progress, resume=pr && !pr.done && pr.pos>30;
+    const b=document.createElement('button'); b.textContent=resume?'▶ Resume':'▶ Play';
+    const lbl=document.createElement('span'); lbl.className='meta';
+    lbl.textContent=(target.s.season===0?'Specials':'S'+target.s.season)+' · E'+target.ep.episode+(resume?' (resume)':'');
+    b.onclick=()=>{ const i=show.seasons.indexOf(target.s); if(i>=0) selectSeason(target.s, tabBtns[i]); queue=target.s.episodes.slice(); open(target.ep,true); };
+    hp.appendChild(b); hp.appendChild(lbl);
+  }
   renderSeason(show.seasons[0]);
+}
+function pickResume(show){
+  let inProg=null, unwatched=null, first=null;
+  for(const s of show.seasons) for(const ep of s.episodes){
+    if(!first) first={ep,s};
+    const pr=ep.progress;
+    if(pr && !pr.done && pr.pos>30 && !inProg) inProg={ep,s};
+    if((!pr || !pr.done) && !unwatched) unwatched={ep,s};
+  }
+  return inProg || unwatched || first;
 }
 function renderSeason(s){
   const list=document.getElementById('eplist'); list.innerHTML='';
   for(const ep of s.episodes){
-    const row=document.createElement('div'); row.className='eprow';
+    const pr=ep.progress, done=pr&&pr.done, inProg=pr&&!pr.done&&pr.pos>30;
+    const row=document.createElement('div'); row.className='eprow'+(done?' done':'');
     const num=document.createElement('div'); num.className='num'; num.textContent = ep.episode!=null ? ('E'+ep.episode) : '–';
     const ttl=document.createElement('div'); ttl.className='ttl'; ttl.textContent = cleanTitle(ep) || ep.title;
-    const playB=document.createElement('button'); playB.textContent='▶ Play';
+    row.appendChild(num); row.appendChild(ttl);
+    if(done){ const sp=document.createElement('span'); sp.className='seen'; sp.textContent='✓ Watched'; row.appendChild(sp); }
+    const playB=document.createElement('button'); playB.textContent = done?'↺ Replay':(inProg?'▶ Resume':'▶ Play');
     playB.onclick=()=>{ queue = s.episodes.slice(); open(ep, true); };
     const castB=document.createElement('button'); castB.className='castb'; castB.textContent='📺 Cast';
     castB.onclick=()=>{ queue = s.episodes.slice(); open(ep, false); };
-    row.appendChild(num); row.appendChild(ttl); row.appendChild(playB); row.appendChild(castB);
+    row.appendChild(playB); row.appendChild(castB);
+    if(inProg){ const bar=document.createElement('div'); bar.className='erbar'; bar.innerHTML='<i style="width:'+Math.min(100,100*pr.pos/pr.dur)+'%"></i>'; row.appendChild(bar); }
     list.appendChild(row);
   }
 }
@@ -549,6 +583,13 @@ function makeCard(it){
     card.classList.add('off');
     const badge=document.createElement('div'); badge.className='badge'; badge.textContent='⏏ reconnect drive';
     thumb.appendChild(badge);
+  }
+  // Continue-watching bar (in-progress, not finished).
+  const pr=it.progress;
+  if(pr && pr.dur && !pr.done && pr.pos>30){
+    const bar=document.createElement('div'); bar.className='pbar';
+    bar.innerHTML='<i style="width:'+Math.min(100,100*pr.pos/pr.dur)+'%"></i>';
+    thumb.appendChild(bar);
   }
   if(it.type==='video'){
     const cast=document.createElement('button');
@@ -646,9 +687,10 @@ document.getElementById('finderClose').onclick=closeFinder;
 // --- Inline player + cast (independent — casting is not a mirror) -----------
 let playingId = null;
 let playlist = [], playIndex = -1; // the ordered episodes/items for autoplay
+let curItem = null, lastSave = 0;  // continue-watching state
 function play(it){ open(it, true); }
 function open(it, watchLocal){
-  playingId = it.id;
+  playingId = it.id; curItem = it;
   // Playlist for "Next"/autoplay: an explicit queue from a show-page season if
   // we have one, else the current grid (already season/episode ordered).
   playlist = queue ? queue.slice() : sortItems(lastItems).filter(x => x.type !== 'folder');
@@ -671,9 +713,31 @@ function updateUpNext(){
 }
 function playNext(){ const n = nextItem(); if(n){ playIndex++; open(n, true); } }
 document.getElementById('nextBtn').onclick = playNext;
-document.getElementById('player').addEventListener('ended', () => {
-  if(document.getElementById('autoplay').checked) playNext();
-});
+(function(){
+  const v = document.getElementById('player');
+  // Resume where we left off (in-progress, not finished).
+  v.addEventListener('loadedmetadata', () => {
+    const pr = curItem && curItem.progress;
+    if(pr && !pr.done && pr.pos>30 && pr.pos < v.duration-20) v.currentTime = pr.pos;
+  });
+  v.addEventListener('timeupdate', () => {
+    if(!v.duration) return;
+    if(Date.now()-lastSave > 5000){ lastSave = Date.now(); saveVideoProgress(); }
+  });
+  v.addEventListener('pause', saveVideoProgress);
+  v.addEventListener('ended', () => {
+    saveVideoProgress();
+    if(document.getElementById('autoplay').checked) playNext();
+  });
+  window.addEventListener('beforeunload', saveVideoProgress);
+})();
+function saveVideoProgress(){
+  const v = document.getElementById('player');
+  if(!curItem || !v.duration || v.currentTime<1) return;
+  // Keep curItem.progress in sync so a same-session reopen resumes correctly.
+  curItem.progress = { pos:v.currentTime, dur:v.duration, done: v.currentTime>=v.duration-20 };
+  fetch('/api/progress?id='+encodeURIComponent(curItem.id)+'&pos='+Math.floor(v.currentTime)+'&dur='+Math.floor(v.duration), {method:'POST', keepalive:true}).catch(()=>{});
+}
 document.getElementById('fsBtn').onclick = () => {
   const v=document.getElementById('player');
   if(document.fullscreenElement) document.exitFullscreen();
@@ -724,8 +788,9 @@ async function toggleTV(btn, name){
 document.getElementById('refreshTVs').onclick = () =>
   renderPlayOn(!document.getElementById('player').paused);
 document.getElementById('closeBtn').onclick = () => {
-  const v=document.getElementById('player'); v.pause(); v.src='';
+  const v=document.getElementById('player'); saveVideoProgress(); v.pause(); v.src='';
   document.getElementById('overlay').style.display='none';
+  browse(current); // refresh so continue-watching bars/ticks reflect this session
 };
 
 // --- Search + sort ---------------------------------------------------------
@@ -834,6 +899,7 @@ async function main() {
   try { Object.assign(config, JSON.parse(fs.readFileSync(stateFile, 'utf8'))); } catch (_) {}
   config.titles = config.titles || {};
   config.removed = config.removed || [];
+  config.progress = config.progress || {}; // rel-path -> { pos, dur, done, at }
 
   const objects = new Map();
   const liveCtx = { map: objects, nextId: 1 };
@@ -847,6 +913,7 @@ async function main() {
     if (parent && parent.children) parent.children = parent.children.filter((x) => x !== node.id);
   };
   const findByRel = (rel) => [...objects.values()].find((n) => n.id !== '0' && relOf(n) === rel);
+  const progOf = (node) => (node && !node.container) ? (config.progress[relOf(node)] || null) : null;
   const maxId = () => [...objects.keys()].reduce((m, k) => Math.max(m, +k || 0), 0);
   const serialize = () => [...objects.values()].map((n) =>
     ({ id: n.id, parentId: n.parentId, container: n.container, title: n.title, path: n.path, file: n.file, contentType: n.contentType, kind: n.kind, season: n.season, episode: n.episode, size: n.size, art: n.art, children: n.children, scanned: n.scanned }));
@@ -964,7 +1031,7 @@ async function main() {
           // Videos always get an /art URL (sidecar art, or 404 → UI fallback).
           const poster = c.art || !c.container ? `/art/${c.id}` : null;
           const available = c.container ? !c.unavailable : !node.unavailable;
-          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', kind: c.container ? 'folder' : (c.kind || 'movie'), season: c.season, episode: c.episode, poster, available };
+          return { id: c.id, title: c.title, type: c.container ? 'folder' : 'video', kind: c.container ? 'folder' : (c.kind || 'movie'), season: c.season, episode: c.episode, progress: progOf(c), poster, available };
         });
         return json(res, 200, { ok: true, folder: { id: node.id, title: node.title }, breadcrumb: breadcrumb(objects, node.id), items });
       }
@@ -980,7 +1047,7 @@ async function main() {
           if (!c || c.container || c.kind !== 'tv') return;
           const s = c.season != null ? c.season : (fallbackSeason != null ? fallbackSeason : 1);
           if (!seasons.has(s)) seasons.set(s, []);
-          seasons.get(s).push({ id: c.id, title: c.title, season: c.season, episode: c.episode, poster: `/art/${c.id}` });
+          seasons.get(s).push({ id: c.id, title: c.title, season: c.season, episode: c.episode, progress: progOf(c), poster: `/art/${c.id}` });
         };
         for (const cid of node.children || []) {
           const c = objects.get(cid);
@@ -998,6 +1065,24 @@ async function main() {
         return json(res, 200, { ok: true, show: { id: node.id, title: node.title, art: node.art ? `/art/${node.id}` : null, seasons: out, total }, breadcrumb: breadcrumb(objects, node.id) });
       }
 
+      // Continue-watching: remember playback position per file (by rel path, so
+      // it survives reindex). Cleared to "done" near the end.
+      if (p === '/api/progress' && req.method === 'GET') {
+        return json(res, 200, { ok: true, progress: config.progress });
+      }
+      if (p === '/api/progress' && req.method === 'POST') {
+        const node = objects.get(u.searchParams.get('id') || '');
+        if (!node || node.container) return json(res, 400, { ok: false });
+        const pos = parseFloat(u.searchParams.get('pos') || '0');
+        const dur = parseFloat(u.searchParams.get('dur') || '0');
+        if (pos >= 0) {
+          const done = dur > 0 && pos >= dur - 20;
+          config.progress[relOf(node)] = { pos: done ? dur : pos, dur, done, at: Date.now() };
+          saveConfig();
+        }
+        return json(res, 200, { ok: true });
+      }
+
       if (p === '/api/reindex' && req.method === 'POST') {
         refresh(); // fire-and-forget; non-blocking
         return json(res, 200, { ok: true, refreshing: true });
@@ -1011,7 +1096,7 @@ async function main() {
             if (n.container || n.id === '0') continue;
             if (n.title.toLowerCase().includes(query)) {
               const parent = objects.get(n.parentId);
-              items.push({ id: n.id, title: n.title, type: 'video', kind: n.kind || 'movie', season: n.season, episode: n.episode, poster: `/art/${n.id}`, available: parent ? !parent.unavailable : true });
+              items.push({ id: n.id, title: n.title, type: 'video', kind: n.kind || 'movie', season: n.season, episode: n.episode, progress: progOf(n), poster: `/art/${n.id}`, available: parent ? !parent.unavailable : true });
             }
           }
         }

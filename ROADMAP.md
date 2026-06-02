@@ -76,6 +76,11 @@ The Library becomes a multi-type front door, not just movies.
 - ✅ Sequencing: episodes order numerically by season→episode (E2 before E10),
      S·E badge on cards, and the inline player auto-advances to the next episode
      (Autoplay toggle + "Next ▸" + "Up next:" indicator)
+- ✅ Continue Watching (video): inline player remembers position per file (by
+     rel path, persisted in ~/.casto, survives reindex), resumes on reopen, and
+     marks episodes watched near the end. Progress bars on grid cards; ✓ Watched
+     / ▶ Resume on show-page rows; a hero ▶ Play/Resume that jumps to the
+     in-progress (else first unwatched) episode
 - ✅ Per-show detail/splash page (Plex/Jellyfin style): opening a show folder
      shows a hero + season picker + episode list; episodes Play (autoplay-next
      within the season) or Cast to a TV. Works for flat folders and Season/*
