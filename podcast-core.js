@@ -25,10 +25,12 @@ const fsp = fs.promises;
 const HOME = os.homedir();
 const DATA_DIR = path.join(HOME, '.casto');
 const DL_DIR = path.join(DATA_DIR, 'podcast-downloads');
+const CACHE_DIR = path.join(DATA_DIR, 'podcast-cache'); // transparent read-ahead buffer
+const CACHE_CAP = 2 * 1024 * 1024 * 1024;               // ~2 GB LRU cap
 const STORE = path.join(DATA_DIR, 'podcasts.json');
 
 function ensureDirs() {
-  for (const d of [DATA_DIR, DL_DIR]) {
+  for (const d of [DATA_DIR, DL_DIR, CACHE_DIR]) {
     try { fs.mkdirSync(d, { recursive: true }); } catch (_) {}
   }
 }
@@ -220,6 +222,38 @@ function extFromType(type, url) {
   return /^\.(mp3|m4a|aac|ogg|wav|mp4)$/.test(ext) ? ext : '.mp3';
 }
 
+// --- Transparent read-ahead cache ------------------------------------------
+// First play of an episode streams through immediately AND kicks off a one-shot
+// background fetch to ~/.casto/podcast-cache. Once cached, every later Range
+// request (seeks, and a casting renderer's repeated pulls) is served from local
+// disk instead of cold-connecting to the CDN each time. LRU-capped by size.
+const caching = new Set();
+function cachePath(id, url) {
+  const safe = Buffer.from(id || url || '').toString('hex').slice(0, 40);
+  return path.join(CACHE_DIR, safe + extFromType('', url));
+}
+function startCache(id, url) {
+  if (!id && !url) return;
+  const file = cachePath(id, url);
+  if (caching.has(file) || fs.existsSync(file)) return;
+  caching.add(file);
+  fetchBuffer(url, { limit: 600 * 1024 * 1024 })
+    .then(({ body }) => { fs.writeFileSync(file + '.part', body); fs.renameSync(file + '.part', file); enforceCacheCap(); })
+    .catch(() => { try { fs.unlinkSync(file + '.part'); } catch (_) {} })
+    .finally(() => caching.delete(file));
+}
+function enforceCacheCap() {
+  let files;
+  try { files = fs.readdirSync(CACHE_DIR).filter((f) => !f.endsWith('.part')).map((f) => { const fp = path.join(CACHE_DIR, f); const st = fs.statSync(fp); return { fp, size: st.size, at: st.mtimeMs }; }); }
+  catch (_) { return; }
+  let total = files.reduce((n, f) => n + f.size, 0);
+  files.sort((a, b) => a.at - b.at); // oldest first
+  for (const f of files) {
+    if (total <= CACHE_CAP) break;
+    try { fs.unlinkSync(f.fp); total -= f.size; } catch (_) {}
+  }
+}
+
 const downloading = new Set();
 async function downloadEpisode(ep) {
   if (store.downloads[ep.id] || downloading.has(ep.id)) return;
@@ -337,14 +371,16 @@ async function handlePodcastRoutes(req, res, u, json, prefix) {
 
   if (at('/audio')) {
     const id = u.searchParams.get('id') || '';
+    const typeFor = (ext) => ext === '.m4a' ? 'audio/mp4' : ext === '.ogg' ? 'audio/ogg' : 'audio/mpeg';
     const d = store.downloads[id];
-    if (d && fs.existsSync(d.file)) {
-      const type = d.ext === '.m4a' ? 'audio/mp4' : d.ext === '.ogg' ? 'audio/ogg' : 'audio/mpeg';
-      serveLocalFile(req, res, d.file, type);
-      return true;
-    }
+    if (d && fs.existsSync(d.file)) { serveLocalFile(req, res, d.file, typeFor(d.ext)); return true; }
     const target = u.searchParams.get('url') || '';
     if (!/^https?:\/\//i.test(target)) { res.writeHead(400); res.end('bad url'); return true; }
+    // Read-ahead cache: serve from the buffered copy once present; else stream
+    // through now and warm the cache in the background for subsequent requests.
+    const cf = cachePath(id, target);
+    if (fs.existsSync(cf)) { serveLocalFile(req, res, cf, typeFor(path.extname(cf))); return true; }
+    startCache(id, target);
     proxyStream(req, res, target);
     return true;
   }

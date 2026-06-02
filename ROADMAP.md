@@ -65,6 +65,13 @@ The Library becomes a multi-type front door, not just movies.
      /api/pod — same subscribe / search / resume / speed / offline as standalone
 - ✅ podcast-core.js: one engine + one browser widget (CastoPod.mount) shared by
      both the standalone app and the hub (no duplication)
+- ✅ Soundbar/audio casting: DLNA upnp:class now matches the media type
+     (audioItem for audio), so music + podcasts fling cleanly to DLNA
+     soundbars/AV receivers/speakers. (Cast/AirPlay/Sonos remain out of scope —
+     separate protocols.)
+- ✅ Read-ahead buffer: podcast audio proxy transparently caches the episode to
+     ~/.casto on first play (LRU-capped ~2GB), so seeks and a casting renderer's
+     repeated Range pulls hit local disk instead of cold-connecting the CDN
 - ✅ Flinging audio: cast podcast episodes (and local music, via the existing
      caster) to a DLNA TV/speaker. Podcasts cast our own proxied URL so the
      renderer gets plain HTTP + Range even for HTTPS-CDN episodes; sessions show
