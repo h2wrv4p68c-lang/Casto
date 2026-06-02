@@ -398,6 +398,26 @@ function pageHTML(libraryName) {
   .eprow button{padding:7px 13px;font-size:13px;border-radius:8px}
   .eprow button.castb{background:transparent;color:var(--accent);border:1px solid var(--accent)}
   #podRoot{padding:22px 24px;max-width:1100px;margin:0 auto}
+  /* phone layout — the "pick here, fling to the TV" device */
+  @media (max-width:640px){
+    header{flex-wrap:wrap;gap:9px;padding:11px 14px}
+    header h1{font-size:25px}
+    #crumbs{order:6;flex-basis:100%}
+    #types{order:5;flex-wrap:nowrap;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+    #types .tchip{white-space:nowrap}
+    #q{order:4;margin-left:auto;min-width:140px;flex:1}
+    #grid{grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:12px;padding:14px}
+    #continue{padding:0 14px}
+    .ccard{flex-basis:150px}
+    .hero{flex-direction:column;gap:14px}
+    .hero .poster{width:128px;height:192px}
+    .hero h2{font-size:30px}
+    .eprow{gap:10px}
+    #overlay{padding:12px}
+    #overlay video{max-height:50vh}
+    #dock,#podDock{flex-wrap:wrap;gap:9px;padding:9px 12px}
+    #dock .seek,#podDock .seek{order:5;flex-basis:100%}
+  }
 ${podcasts.podcastCSS()}
 </style></head><body>
 <header>
