@@ -93,6 +93,10 @@ The Library becomes a multi-type front door, not just movies.
      name. Click to resume. /api/continue powers it
 - ✅ Keyboard shortcuts in the player: Space play/pause, ←/→ seek 10s, F
      fullscreen, N next episode, Esc close (and Esc closes finder/Now Playing)
+- ✅ Interface polish: loading + friendly empty states (browse/search/filtered),
+     focus-visible outlines and focusable cards (Enter/Space) for keyboard/remote,
+     touch-device support (cards expose the Cast shortcut without hover), themed
+     thin scrollbars on the chip/Continue strips, button press feedback
 - ✅ Per-show detail/splash page (Plex/Jellyfin style): opening a show folder
      shows a hero + season picker + episode list; episodes Play (autoplay-next
      within the season) or Cast to a TV. Works for flat folders and Season/*

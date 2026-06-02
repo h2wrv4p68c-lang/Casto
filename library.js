@@ -413,6 +413,26 @@ function pageHTML(libraryName) {
   .eprow button{padding:7px 13px;font-size:13px;border-radius:8px}
   .eprow button.castb{background:transparent;color:var(--accent);border:1px solid var(--accent)}
   #podRoot{padding:22px 24px;max-width:1100px;margin:0 auto}
+  /* --- interface polish --- */
+  button,.chip,.tchip,.schip,.card{transition:transform .12s, background .12s, color .12s, box-shadow .12s}
+  button:active{transform:translateY(1px)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+  .card:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .label{line-height:1.25}
+  /* loading + empty states */
+  .msg{grid-column:1/-1;text-align:center;color:var(--sub);padding:60px 16px;font-size:15px}
+  .msg .big{font-family:'Cormorant Garamond',Georgia,serif;font-size:26px;color:var(--ink);display:block;margin-bottom:6px}
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid #c9ac74;border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  /* thin themed scrollbars on the horizontal strips */
+  #types,.crow{scrollbar-width:thin;scrollbar-color:#c9ac74 transparent}
+  #types::-webkit-scrollbar,.crow::-webkit-scrollbar{height:7px}
+  #types::-webkit-scrollbar-thumb,.crow::-webkit-scrollbar-thumb{background:#c9ac74;border-radius:4px}
+  /* touch devices have no hover: keep the Cast shortcut, drop admin buttons */
+  @media (hover:none){
+    .card .findbtn{display:none}
+    .card .castbtn{display:block}
+  }
   /* phone layout — the "pick here, fling to the TV" device */
   @media (max-width:640px){
     header{flex-wrap:wrap;gap:9px;padding:11px 14px}
@@ -495,9 +515,13 @@ let queue = null; // explicit ordered playlist (set when playing from a show pag
 let autoplayOn = localStorage.getItem('casto.autoplay') !== '0'; // applies to local + cast
 const KIND_ICON = { folder:'📁', movie:'🎬', tv:'📺', music:'🎵' };
 
+function showLoading(text){
+  const g=document.getElementById('grid'); g.className=''; g.innerHTML='<div class="msg"><span class="spin"></span>'+text+'</div>';
+}
 async function browse(id){
   current = id; queue = null;
   const q = document.getElementById('q'); if(q) q.value='';
+  showLoading('Loading…');
   const data = await (await fetch('/api/browse?id='+encodeURIComponent(id))).json();
   // A folder is "show-like" if it holds episodes directly or has Season subs.
   const eps = data.items.filter(x => x.kind==='tv' && x.episode!=null);
@@ -506,6 +530,7 @@ async function browse(id){
   renderItems(data.items, data.breadcrumb);
 }
 async function search(query){
+  showLoading('Searching…');
   const data = await (await fetch('/api/search?q='+encodeURIComponent(query))).json();
   renderItems(data.items, null);
 }
@@ -615,7 +640,16 @@ function renderItems(items, breadcrumb){
     : '<a onclick="browse(\\'0\\')">Library</a> › search results';
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
-  for(const it of sortItems(items)) grid.appendChild(makeCard(it));
+  const ordered = sortItems(items);
+  if(!ordered.length){
+    const searching = breadcrumb===null && document.getElementById('q').value.trim();
+    const kindWord = typeFilter==='all' ? 'media' : (typeFilter==='tv'?'TV episodes':typeFilter+'s');
+    grid.innerHTML = searching
+      ? '<div class="msg"><span class="big">No matches</span>Try a different search.</div>'
+      : '<div class="msg"><span class="big">Nothing here</span>'+(typeFilter==='all'?'This folder is empty.':'No '+kindWord+' in this view.')+'</div>';
+    renderContinue(); return;
+  }
+  for(const it of ordered) grid.appendChild(makeCard(it));
   renderContinue();
 }
 // Home "Continue Watching" strip — in-progress items across the library.
@@ -695,10 +729,13 @@ function makeCard(it){
   if(tag){ label.innerHTML = '<span class="se">'+tag+'</span>'+esc(cleanTitle(it)); }
   else { label.textContent = it.title; }
   card.appendChild(thumb); card.appendChild(label);
-  card.onclick = () => {
-    if(it.available===false){ return; }
-    it.type==='folder' ? browse(it.id) : play(it);
-  };
+  const activate = () => { if(it.available===false) return; it.type==='folder' ? browse(it.id) : play(it); };
+  card.onclick = activate;
+  // Keyboard / TV-remote focusable.
+  card.tabIndex = 0;
+  card.setAttribute('role','button');
+  card.setAttribute('aria-label', it.title);
+  card.onkeydown = (e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); activate(); } };
   return card;
 }
 async function removeFolder(it){
