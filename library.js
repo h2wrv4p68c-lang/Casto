@@ -380,6 +380,18 @@ function pageHTML(libraryName) {
   .heroplay{margin-top:16px;display:flex;gap:10px;align-items:center}
   .thumb .pbar{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(20,12,4,.35)}
   .thumb .pbar>i{display:block;height:100%;background:var(--accent)}
+  /* Continue Watching row (home) */
+  #continue{padding:0 24px}
+  #continue h3{font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;margin:16px 0 4px}
+  .crow{display:flex;gap:14px;overflow-x:auto;padding:6px 0 10px}
+  .ccard{flex:0 0 168px;background:var(--card);border-radius:10px;overflow:hidden;cursor:pointer;box-shadow:0 2px 8px rgba(60,40,15,.18);transition:transform .12s}
+  .ccard:hover{transform:translateY(-3px)}
+  .ccard .ct{position:relative;aspect-ratio:16/9;background:#d8c191;display:flex;align-items:center;justify-content:center;font-size:30px;color:#a07e4e;overflow:hidden}
+  .ccard .ct img{width:100%;height:100%;object-fit:cover}
+  .ccard .ct .pbar{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(20,12,4,.35)}
+  .ccard .ct .pbar>i{display:block;height:100%;background:var(--accent)}
+  .ccard .cl{padding:8px 10px 0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ccard .cs{padding:1px 10px 9px;font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .eprow .num{font-variant-numeric:tabular-nums;font-weight:700;color:var(--accent);min-width:38px;text-align:center;font-size:15px}
   .eprow .ttl{flex:1;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .eprow .seen{font-size:11px;color:var(--sub);border:1px solid var(--line,#c9ac74);border-radius:20px;padding:1px 8px}
@@ -397,6 +409,7 @@ ${podcasts.podcastCSS()}
   <button class="ghost" id="reindexBtn" style="color:var(--accent);border-color:var(--accent)" title="Rescan the drive for changes">↻ Rescan</button>
   <button class="ghost" id="npBtn" style="color:var(--accent);border-color:var(--accent)">▶ Now Playing</button>
 </header>
+<div id="continue"></div>
 <div id="grid"></div>
 <div id="podRoot" style="display:none"></div>
 
@@ -567,6 +580,33 @@ function renderItems(items, breadcrumb){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
   for(const it of sortItems(items)) grid.appendChild(makeCard(it));
+  renderContinue();
+}
+// Home "Continue Watching" strip — in-progress items across the library.
+async function renderContinue(){
+  const wrap=document.getElementById('continue');
+  const searching=(document.getElementById('q').value||'').trim();
+  if(current!=='0' || typeFilter==='podcasts' || searching){ wrap.innerHTML=''; return; }
+  let r; try{ r=await (await fetch('/api/continue')).json(); }catch(_){ wrap.innerHTML=''; return; }
+  const items=(r.items||[]).filter(x=>typeFilter==='all'||x.kind===typeFilter);
+  if(!items.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML='<h3>Continue Watching</h3>';
+  const row=document.createElement('div'); row.className='crow';
+  for(const it of items){
+    const c=document.createElement('div'); c.className='ccard';
+    const ct=document.createElement('div'); ct.className='ct';
+    const img=new Image(); img.src=it.poster;
+    img.onerror=()=>{ img.remove(); if(!ct.querySelector('.ph')){ const ph=document.createElement('span'); ph.className='ph'; ph.textContent=KIND_ICON[it.kind]||'🎬'; ct.appendChild(ph); } };
+    ct.appendChild(img);
+    const pr=it.progress;
+    if(pr&&pr.dur){ const b=document.createElement('div'); b.className='pbar'; b.innerHTML='<i style="width:'+Math.min(100,100*pr.pos/pr.dur)+'%"></i>'; ct.appendChild(b); }
+    const cl=document.createElement('div'); cl.className='cl'; cl.textContent=(seTag(it)?seTag(it)+' ':'')+(cleanTitle(it)||it.title);
+    const cs=document.createElement('div'); cs.className='cs'; cs.textContent=it.show||'';
+    c.appendChild(ct); c.appendChild(cl); c.appendChild(cs);
+    c.onclick=()=>{ queue=null; open(it,true); };
+    row.appendChild(c);
+  }
+  wrap.appendChild(row);
 }
 function makeCard(it){
   const card = document.createElement('div');
@@ -829,6 +869,27 @@ async function refreshNP(){
   }
 }
 
+// --- Keyboard shortcuts ----------------------------------------------------
+document.addEventListener('keydown',(e)=>{
+  const tag=(e.target.tagName||'').toUpperCase();
+  if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){ if(e.key==='Escape') e.target.blur(); return; }
+  const ov=document.getElementById('overlay');
+  if(ov.style.display==='flex'){
+    const v=document.getElementById('player');
+    if(e.key==='Escape') document.getElementById('closeBtn').click();
+    else if(e.key===' '){ e.preventDefault(); v.paused?v.play().catch(()=>{}):v.pause(); }
+    else if(e.key==='ArrowRight') v.currentTime=Math.min(v.duration||1e9, v.currentTime+10);
+    else if(e.key==='ArrowLeft') v.currentTime=Math.max(0, v.currentTime-10);
+    else if(e.key.toLowerCase()==='n') playNext();
+    else if(e.key.toLowerCase()==='f') document.getElementById('fsBtn').click();
+    return;
+  }
+  if(e.key==='Escape'){
+    if(document.body.classList.contains('split')) return closeFinder();
+    const np=document.getElementById('nowp'); if(np.style.display==='flex') np.style.display='none';
+  }
+});
+
 // --- Content-type filter chips (the unified hub) ---------------------------
 // Movies / TV / Music filter the local file grid by kind; Podcasts swaps the
 // grid for the shared podcast widget (RSS subscribe, directory search, player).
@@ -1081,6 +1142,26 @@ async function main() {
           saveConfig();
         }
         return json(res, 200, { ok: true });
+      }
+
+      // In-progress items across the whole library, most-recent first.
+      if (p === '/api/continue') {
+        const out = [];
+        for (const [rel, pr] of Object.entries(config.progress)) {
+          if (pr.done || !(pr.pos > 30)) continue;
+          const node = findByRel(rel);
+          if (!node || node.container) continue;
+          const parent = objects.get(node.parentId);
+          let show = parent && parent.id !== '0' ? parent.title : '';
+          // For episodes, prefer the series name over a "Season N" subfolder.
+          if (node.kind === 'tv' && parent && /^(season|series|specials|s\d)/i.test(parent.title)) {
+            const gp = objects.get(parent.parentId);
+            if (gp && gp.id !== '0') show = gp.title;
+          }
+          out.push({ id: node.id, title: node.title, kind: node.kind || 'movie', season: node.season, episode: node.episode, progress: pr, poster: `/art/${node.id}`, at: pr.at || 0, show });
+        }
+        out.sort((a, b) => b.at - a.at);
+        return json(res, 200, { ok: true, items: out.slice(0, 12) });
       }
 
       if (p === '/api/reindex' && req.method === 'POST') {

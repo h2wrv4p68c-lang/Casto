@@ -81,6 +81,11 @@ The Library becomes a multi-type front door, not just movies.
      marks episodes watched near the end. Progress bars on grid cards; ✓ Watched
      / ▶ Resume on show-page rows; a hero ▶ Play/Resume that jumps to the
      in-progress (else first unwatched) episode
+- ✅ "Continue Watching" home row: a strip of in-progress items across the
+     library (most-recent first), with progress bars; episodes show the series
+     name. Click to resume. /api/continue powers it
+- ✅ Keyboard shortcuts in the player: Space play/pause, ←/→ seek 10s, F
+     fullscreen, N next episode, Esc close (and Esc closes finder/Now Playing)
 - ✅ Per-show detail/splash page (Plex/Jellyfin style): opening a show folder
      shows a hero + season picker + episode list; episodes Play (autoplay-next
      within the season) or Cast to a TV. Works for flat folders and Season/*
