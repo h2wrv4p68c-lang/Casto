@@ -102,7 +102,11 @@ The Library becomes a multi-type front door, not just movies.
 - ⬜ Folder-level kind inference (folders currently always show; leaves filter)
 - ⬜ Music metadata (album/artist grouping) + audiobook chapters
 - ⬜ Movie-vs-TV via a metadata provider instead of filename heuristics
-- ⬜ Cast auto-advance (poll the renderer for "ended" → fling next episode)
+- ✅ Cast auto-advance ("Autoplay"): casting sends the ordered queue; the server
+     polls the renderer and flings the next item when one ends (STOPPED after
+     PLAYING). Switch lives in the player (local) and per-session in Now Playing
+     (cast), plus a ⏭ Next button; preference persisted. Library queues only —
+     podcast cast auto-advance is a later add
 
 ## M2.5 — Podcasts ✅ (standalone)
 A self-contained podcast app (`podcasts.js`) in the Casto family theme — no

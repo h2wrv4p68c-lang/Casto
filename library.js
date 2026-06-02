@@ -179,6 +179,9 @@ function readBody(req, limit) {
     req.on('error', reject);
   });
 }
+async function readJSON(req) {
+  try { return JSON.parse((await readBody(req, 1024 * 1024)).toString('utf8') || '{}'); } catch (_) { return {}; }
+}
 function extForType(ct, src) {
   ct = (ct || '').toLowerCase();
   if (ct.includes('png')) return '.png';
@@ -284,6 +287,12 @@ async function seekRel(controlURL, delta) {
   const m = /(\d+):(\d+):(\d+)/.exec(t) || [0, 0, 0, 0];
   const cur = +m[1] * 3600 + +m[2] * 60 + +m[3];
   await soap(controlURL, 'Seek', `<InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>${hms(cur + delta)}</Target>`);
+}
+// Current renderer transport state (PLAYING / PAUSED_PLAYBACK / STOPPED / …),
+// used to detect when a cast track ends so we can auto-advance the queue.
+async function transportState(controlURL) {
+  const d = await soap(controlURL, 'GetTransportInfo', '<InstanceID>0</InstanceID>');
+  return (/<CurrentTransportState>([^<]*)<\/CurrentTransportState>/i.exec(d) || [])[1] || '';
 }
 
 // --- File serving (Range) --------------------------------------------------
@@ -483,6 +492,7 @@ function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&'
 
 let lastItems = [], lastCrumb = [], sortMode = 'name-asc', typeFilter = 'all';
 let queue = null; // explicit ordered playlist (set when playing from a show page)
+let autoplayOn = localStorage.getItem('casto.autoplay') !== '0'; // applies to local + cast
 const KIND_ICON = { folder:'📁', movie:'🎬', tv:'📺', music:'🎵' };
 
 async function browse(id){
@@ -847,8 +857,10 @@ async function toggleTV(btn, name){
     st.textContent = d.ok ? ('Stopped '+name) : ('Failed: '+(d.error||''));
   } else {
     btn.classList.add('on'); st.textContent='Casting to '+name+'…';
-    const d=await (await fetch('/api/cast?id='+encodeURIComponent(playingId)+'&target='+encodeURIComponent(name),{method:'POST'})).json();
-    if(d.ok){ st.textContent='Playing on '+name; } else { btn.classList.remove('on'); st.textContent='Failed: '+(d.error||''); }
+    // Send the ordered queue + index so the TV can auto-advance ("Autoplay").
+    const d=await (await fetch('/api/cast?id='+encodeURIComponent(playingId)+'&target='+encodeURIComponent(name),
+      {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ queue: playlist.map(x=>x.id), index: playIndex, autoplay: autoplayOn })})).json();
+    if(d.ok){ st.textContent='Playing on '+name+(autoplayOn && playlist.length>1?' · Autoplay on':''); } else { btn.classList.remove('on'); st.textContent='Failed: '+(d.error||''); }
   }
 }
 document.getElementById('refreshTVs').onclick = () =>
@@ -886,14 +898,28 @@ async function refreshNP(){
     const label=document.createElement('div'); label.style.flex='1';
     label.innerHTML='<b>'+esc(s.tv)+'</b><br><span style="color:var(--sub);font-size:13px">'+esc(s.title)+'</span>';
     row.appendChild(label);
-    for(const [txt,act,tip] of [['⏪','back','Rewind 30s'],['▶','play','Play'],['⏸','pause','Pause'],['⏩','forward','Forward 30s'],['⏹','stop','Stop']]){
+    const ctrls=[['⏪','back','Rewind 30s'],['▶','play','Play'],['⏸','pause','Pause'],['⏩','forward','Forward 30s']];
+    if(s.hasNext) ctrls.push(['⏭','next','Next']);
+    ctrls.push(['⏹','stop','Stop']);
+    for(const [txt,act,tip] of ctrls){
       const b=document.createElement('button'); b.textContent=txt; b.title=tip;
-      b.onclick=async()=>{ await fetch('/api/control?target='+encodeURIComponent(s.tv)+'&action='+act,{method:'POST'}); if(act==='stop') refreshNP(); };
+      b.onclick=async()=>{ await fetch('/api/control?target='+encodeURIComponent(s.tv)+'&action='+act,{method:'POST'}); if(act==='stop'||act==='next') refreshNP(); };
       row.appendChild(b);
     }
+    // Autoplay switch for this cast session.
+    const ap=document.createElement('button'); ap.className='chip'+(s.autoplay?' on':''); ap.textContent='⟳ Autoplay';
+    ap.title='Auto-advance to the next item when this one ends';
+    ap.onclick=async()=>{ await fetch('/api/control?target='+encodeURIComponent(s.tv)+'&action=autoplay&on='+(s.autoplay?'0':'1'),{method:'POST'}); refreshNP(); };
+    row.appendChild(ap);
     list.appendChild(row);
   }
 }
+
+// Autoplay preference (governs local autoplay + cast auto-advance), persisted.
+(function(){
+  const cb=document.getElementById('autoplay');
+  if(cb){ cb.checked=autoplayOn; cb.onchange=()=>{ autoplayOn=cb.checked; localStorage.setItem('casto.autoplay', autoplayOn?'1':'0'); }; }
+})();
 
 // --- Keyboard shortcuts ----------------------------------------------------
 document.addEventListener('keydown',(e)=>{
@@ -1072,7 +1098,40 @@ async function main() {
   }, 10000);
 
   let rendererCache = { at: 0, list: [] };
-  const castByDevice = new Map(); // tvName -> controlURL (active casts)
+  const castByDevice = new Map(); // tvName -> { controlURL, title, queue, idx, autoplay, timer, started, polling, errs }
+
+  // Auto-advance ("Autoplay"): poll the renderer; when the current track ends
+  // (STOPPED after we saw it PLAYING) and autoplay is on, fling the next item
+  // in the queue. A user Stop deletes the session, so a STOPPED on a live
+  // session means a natural end — that's our "ended" signal.
+  const stopCastPoll = (name) => { const s = castByDevice.get(name); if (s && s.timer) { clearInterval(s.timer); s.timer = null; } };
+  const hasNext = (s) => s && s.queue && s.idx < s.queue.length - 1;
+  async function pollCast(name) {
+    const s = castByDevice.get(name);
+    if (!s || s.polling) return;
+    s.polling = true;
+    try {
+      const state = await transportState(s.controlURL);
+      s.errs = 0;
+      if (state === 'PLAYING') { s.started = true; return; }
+      if (state === 'STOPPED' && s.started) {
+        s.started = false;
+        if (s.autoplay && hasNext(s)) {
+          s.idx++; const it = s.queue[s.idx];
+          try { await castTo(s.controlURL, it.url, it.title, it.contentType); s.title = it.title; } catch (_) {}
+        } else { stopCastPoll(name); } // end of queue, or autoplay off
+      }
+    } catch (_) {
+      if (((castByDevice.get(name) || {}).errs = ((castByDevice.get(name) || {}).errs || 0) + 1) > 6) stopCastPoll(name);
+    } finally { const s2 = castByDevice.get(name); if (s2) s2.polling = false; }
+  }
+  const startCastPoll = (name) => { const s = castByDevice.get(name); if (!s) return; stopCastPoll(name); s.started = false; s.errs = 0; s.timer = setInterval(() => pollCast(name), 5000); };
+  // Build a castable queue from media node ids (skips folders/missing).
+  const queueFromIds = (ids) => (ids || []).map((id) => {
+    const n = objects.get(id);
+    if (!n || n.container) return null;
+    return { id, url: `http://${host}:${port}/media/${id}`, title: n.title, contentType: n.contentType };
+  }).filter(Boolean);
   const renderers = async () => {
     if (Date.now() - rendererCache.at < 60000 && rendererCache.list.length) return rendererCache.list;
     rendererCache = { at: Date.now(), list: await findRenderers() };
@@ -1241,14 +1300,21 @@ async function main() {
         const target = u.searchParams.get('target');
         const dev = (await renderers()).find((d) => d.name.toLowerCase().includes((target || '').toLowerCase()));
         if (!dev) return json(res, 404, { ok: false, error: 'no matching TV' });
+        // Optional body: an ordered queue + index for auto-advance ("Autoplay").
+        const body = await readJSON(req);
+        const queue = queueFromIds(body.queue);
+        let idx = queue.findIndex((q) => q.id === node.id);
+        if (idx < 0) idx = typeof body.index === 'number' ? body.index : 0;
         const url = `http://${host}:${port}/media/${node.id}`;
         await castTo(dev.controlURL, url, node.title, node.contentType);
-        castByDevice.set(dev.name, { controlURL: dev.controlURL, title: node.title });
+        stopCastPoll(dev.name);
+        castByDevice.set(dev.name, { controlURL: dev.controlURL, title: node.title, queue: queue.length ? queue : [{ id: node.id, url, title: node.title, contentType: node.contentType }], idx: idx < 0 ? 0 : idx, autoplay: body.autoplay !== false });
+        if (body.autoplay !== false) startCastPoll(dev.name); // poll for end-of-track
         return json(res, 200, { ok: true, device: dev.name });
       }
 
       if (p === '/api/sessions') {
-        return json(res, 200, { ok: true, sessions: [...castByDevice.entries()].map(([tv, s]) => ({ tv, title: s.title })) });
+        return json(res, 200, { ok: true, sessions: [...castByDevice.entries()].map(([tv, s]) => ({ tv, title: s.title, autoplay: !!s.autoplay, hasNext: hasNext(s) })) });
       }
 
       if (p === '/api/control' && req.method === 'POST') {
@@ -1260,8 +1326,16 @@ async function main() {
         else if (a === 'pause') await tx.pause(s.controlURL);
         else if (a === 'forward') await seekRel(s.controlURL, 30);
         else if (a === 'back') await seekRel(s.controlURL, -30);
-        else if (a === 'stop') { await tx.stop(s.controlURL); castByDevice.delete(target); }
-        else return json(res, 400, { ok: false, error: 'unknown action' });
+        else if (a === 'stop') { stopCastPoll(target); await tx.stop(s.controlURL); castByDevice.delete(target); }
+        else if (a === 'next') {
+          if (!hasNext(s)) return json(res, 400, { ok: false, error: 'no next item' });
+          s.idx++; const it = s.queue[s.idx]; s.title = it.title; s.started = false;
+          await castTo(s.controlURL, it.url, it.title, it.contentType);
+          if (s.autoplay && !s.timer) startCastPoll(target);
+        } else if (a === 'autoplay') {
+          s.autoplay = u.searchParams.get('on') !== '0';
+          if (s.autoplay) startCastPoll(target); else stopCastPoll(target);
+        } else return json(res, 400, { ok: false, error: 'unknown action' });
         return json(res, 200, { ok: true });
       }
 
@@ -1301,6 +1375,7 @@ async function main() {
           controlURL = dev && dev.controlURL;
         }
         if (!controlURL) return json(res, 404, { ok: false, error: 'no matching TV' });
+        stopCastPoll(target);
         await soap(controlURL, 'Stop', '<InstanceID>0</InstanceID>');
         castByDevice.delete(target);
         return json(res, 200, { ok: true });
