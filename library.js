@@ -260,7 +260,13 @@ function soap(controlURL, action, body) {
   });
 }
 async function castTo(controlURL, url, title, contentType) {
-  const didl = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="0" parentID="-1" restricted="1">' + `<dc:title>${xmlEscape(title)}</dc:title><upnp:class>object.item.videoItem</upnp:class>` + `<res protocolInfo="http-get:*:${contentType}:${DLNA_FEATURES}">${xmlEscape(url)}</res></item></DIDL-Lite>`;
+  // Match the DIDL upnp:class to the media — audio-only renderers (soundbars,
+  // AV receivers, networked speakers) reject a videoItem and need audioItem.
+  const ct = String(contentType || '');
+  const upnpClass = ct.startsWith('audio/') ? 'object.item.audioItem.musicTrack'
+    : ct.startsWith('image/') ? 'object.item.imageItem.photo'
+    : 'object.item.videoItem';
+  const didl = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="0" parentID="-1" restricted="1">' + `<dc:title>${xmlEscape(title)}</dc:title><upnp:class>${upnpClass}</upnp:class>` + `<res protocolInfo="http-get:*:${contentType}:${DLNA_FEATURES}">${xmlEscape(url)}</res></item></DIDL-Lite>`;
   await soap(controlURL, 'SetAVTransportURI', `<InstanceID>0</InstanceID><CurrentURI>${xmlEscape(url)}</CurrentURI><CurrentURIMetaData>${xmlEscape(didl)}</CurrentURIMetaData>`);
   await soap(controlURL, 'Play', '<InstanceID>0</InstanceID><Speed>1</Speed>');
 }
