@@ -1,0 +1,38 @@
+FIDCODE 0.1 message format. One message per line:
+TYPE [@ACCOUNT] [#REF] CODE:VALUE ... ; change = FROM>TO ; dates YYMMDD or T0=today ; quoted free text.
+
+ENUMS
+risk: L=low, LM=low to medium, M=medium, MH=medium to high, H=high
+horizon: <1=under 1 year, 1-3=1 to 3 years, 3-5=3 to 5 years, 5-10=5 to 10 years, 10+=over 10 years
+objective: PRS=capital preservation, INC=income, BAL=balanced, GRO=growth, AGR=aggressive growth
+acct_type: NR=non-registered, RRSP=RRSP, RRIF=RRIF, TFSA=TFSA, FHSA=FHSA, RESP=RESP, LIRA=LIRA
+kyc_source: MTG=in-person meeting, CALL=phone call, VID=video meeting, FORM=client-signed form, PORT=client portal
+relation: SP=spouse or partner, CH=adult child, SIB=sibling, FR=friend, PRO=professional advisor, OTH=other
+yes_no: Y=yes, N=no
+solicited: S=solicited, U=unsolicited
+kind: C=cash, K=in kind
+trigger: KYC=KYC change, TRF=assets transferred in, REP=change of registered representative, PER=periodic review, EVT=significant market or life event
+suit_result: S=suitable, U=not suitable, P=review pending
+suit_action: NONE=no action needed, REBAL=rebalance recommended, ADV=client advised in writing, ESC=escalated to compliance
+hold_reason: FX=suspected financial exploitation, DMC=suspected diminished mental capacity
+complaint: SUIT=suitability, FEES=fees or charges, SVC=service quality, UNA=unauthorized trading, MIS=misrepresentation, OTH=other
+addr_type: RES=residential, MAIL=mailing
+province: AB=Alberta, BC=British Columbia, MB=Manitoba, NB=New Brunswick, NL=Newfoundland and Labrador, NS=Nova Scotia, NT=Northwest Territories, NU=Nunavut, ON=Ontario, PE=Prince Edward Island, QC=Quebec, SK=Saskatchewan, YT=Yukon
+verify: DOC=document on file, CALL=call-back to number on file, ID=government ID re-verified
+doc: KYCF=KYC form, ID=identification, SIG=signature, TCPF=trusted contact form, NAAF=new account application, TRFF=transfer authorization
+status: OK=accepted, REJ=rejected, PEND=pending
+reason: MISS=missing field, INV=invalid value, AUTH=not authorized, DUP=duplicate, OTH=other
+
+TYPES (* = required)
+KYC.U KYC update: @acct* RT=risk tolerance[risk>] RC=risk capacity[risk>] TH=time horizon[horizon>] IO=investment objective[objective>] EF*=effective date[date] SRC*=information source[kyc_source]
+TCP.U trusted contact person update: @acct* NM*=contact name[text] REL*=relationship[relation] PH=phone[text] CON*=client consent to contact[yes_no] EF*=effective date[date]
+ORD.B purchase order: @acct* FND*=fund code[id] AMT*=amount (CAD)[number] ACT*=account type[acct_type] SOL*=solicitation[solicited]
+ORD.R redemption order: @acct* FND*=fund code[id] AMT=amount (CAD)[number] UN=units[number] ACT*=account type[acct_type] SOL*=solicitation[solicited] (exactly one of AMT/UN)
+ORD.X fund switch: @acct* FND*=fund code[change>] AMT=amount (CAD)[number] UN=units[number] ACT*=account type[acct_type] SOL*=solicitation[solicited] (exactly one of AMT/UN)
+TRF.I account transfer in: @acct* FROM*=delivering institution[text] ACT*=account type[acct_type] KIND*=transfer form[kind] AMT=estimated value (CAD)[number]
+SUIT.R suitability review: @acct* TRG*=trigger[trigger] RES*=result[suit_result] ACTN*=action taken[suit_action] DT*=review date[date]
+VC.H temporary hold placed: @acct* RSN*=reason[hold_reason] TXN*=held transaction reference[id] NTF*=client notified on[date] REVW*=next review date[date]
+CMP.R complaint received: @acct* CAT*=category[complaint] RCV*=date received[date] ACK*=acknowledgement due[date]
+ADDR.U address change: @acct* TYP*=address type[addr_type] PROV*=province[province] PC*=postal code[id] VER*=verification method[verify] EF*=effective date[date]
+DOC.R document request: @acct* DOC*=document[doc] DUE*=due date[date] NOTE=note[text]
+ACK acknowledgement: ST*=status[status] RC=reason[reason] F=field concerned[id]

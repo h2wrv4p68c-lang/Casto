@@ -1,0 +1,827 @@
+{
+  "KYC.U": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 KYC.U: KYC update",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "KYC update"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "risk tolerance": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "enum": [
+              "low",
+              "low to medium",
+              "medium",
+              "medium to high",
+              "high"
+            ]
+          },
+          "to": {
+            "enum": [
+              "low",
+              "low to medium",
+              "medium",
+              "medium to high",
+              "high"
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "x-fidcode": "RT"
+      },
+      "risk capacity": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "enum": [
+              "low",
+              "low to medium",
+              "medium",
+              "medium to high",
+              "high"
+            ]
+          },
+          "to": {
+            "enum": [
+              "low",
+              "low to medium",
+              "medium",
+              "medium to high",
+              "high"
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "x-fidcode": "RC"
+      },
+      "time horizon": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "enum": [
+              "under 1 year",
+              "1 to 3 years",
+              "3 to 5 years",
+              "5 to 10 years",
+              "over 10 years"
+            ]
+          },
+          "to": {
+            "enum": [
+              "under 1 year",
+              "1 to 3 years",
+              "3 to 5 years",
+              "5 to 10 years",
+              "over 10 years"
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "x-fidcode": "TH"
+      },
+      "investment objective": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "enum": [
+              "capital preservation",
+              "income",
+              "balanced",
+              "growth",
+              "aggressive growth"
+            ]
+          },
+          "to": {
+            "enum": [
+              "capital preservation",
+              "income",
+              "balanced",
+              "growth",
+              "aggressive growth"
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "x-fidcode": "IO"
+      },
+      "effective date": {
+        "type": "string",
+        "format": "date",
+        "x-fidcode": "EF"
+      },
+      "information source": {
+        "enum": [
+          "in-person meeting",
+          "phone call",
+          "video meeting",
+          "client-signed form",
+          "client portal"
+        ],
+        "x-fidcode": "SRC"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "effective date",
+      "information source"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.2",
+      "CIRO IDPC Rule 3200 series",
+      "CIRO MFD Rule 2.2.1"
+    ]
+  },
+  "TCP.U": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 TCP.U: trusted contact person update",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "trusted contact person update"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "contact name": {
+        "type": "string",
+        "x-fidcode": "NM"
+      },
+      "relationship": {
+        "enum": [
+          "spouse or partner",
+          "adult child",
+          "sibling",
+          "friend",
+          "professional advisor",
+          "other"
+        ],
+        "x-fidcode": "REL"
+      },
+      "phone": {
+        "type": "string",
+        "x-fidcode": "PH"
+      },
+      "client consent to contact": {
+        "enum": [
+          "yes",
+          "no"
+        ],
+        "x-fidcode": "CON"
+      },
+      "effective date": {
+        "type": "string",
+        "format": "date",
+        "x-fidcode": "EF"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "contact name",
+      "relationship",
+      "client consent to contact",
+      "effective date"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.2(2)(e)",
+      "NI 31-103 s.13.19"
+    ]
+  },
+  "ORD.B": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 ORD.B: purchase order",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "purchase order"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "fund code": {
+        "type": "string",
+        "x-fidcode": "FND"
+      },
+      "amount (CAD)": {
+        "type": "number",
+        "minimum": 0,
+        "x-fidcode": "AMT"
+      },
+      "account type": {
+        "enum": [
+          "non-registered",
+          "RRSP",
+          "RRIF",
+          "TFSA",
+          "FHSA",
+          "RESP",
+          "LIRA"
+        ],
+        "x-fidcode": "ACT"
+      },
+      "solicitation": {
+        "enum": [
+          "solicited",
+          "unsolicited"
+        ],
+        "x-fidcode": "SOL"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "fund code",
+      "amount (CAD)",
+      "account type",
+      "solicitation"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.3"
+    ]
+  },
+  "ORD.R": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 ORD.R: redemption order",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "redemption order"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "fund code": {
+        "type": "string",
+        "x-fidcode": "FND"
+      },
+      "amount (CAD)": {
+        "type": "number",
+        "minimum": 0,
+        "x-fidcode": "AMT"
+      },
+      "units": {
+        "type": "number",
+        "minimum": 0,
+        "x-fidcode": "UN"
+      },
+      "account type": {
+        "enum": [
+          "non-registered",
+          "RRSP",
+          "RRIF",
+          "TFSA",
+          "FHSA",
+          "RESP",
+          "LIRA"
+        ],
+        "x-fidcode": "ACT"
+      },
+      "solicitation": {
+        "enum": [
+          "solicited",
+          "unsolicited"
+        ],
+        "x-fidcode": "SOL"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "fund code",
+      "account type",
+      "solicitation"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.3"
+    ],
+    "oneOf": [
+      {
+        "required": [
+          "amount (CAD)"
+        ]
+      },
+      {
+        "required": [
+          "units"
+        ]
+      }
+    ]
+  },
+  "ORD.X": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 ORD.X: fund switch",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "fund switch"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "fund code": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "x-fidcode": "FND"
+      },
+      "amount (CAD)": {
+        "type": "number",
+        "minimum": 0,
+        "x-fidcode": "AMT"
+      },
+      "units": {
+        "type": "number",
+        "minimum": 0,
+        "x-fidcode": "UN"
+      },
+      "account type": {
+        "enum": [
+          "non-registered",
+          "RRSP",
+          "RRIF",
+          "TFSA",
+          "FHSA",
+          "RESP",
+          "LIRA"
+        ],
+        "x-fidcode": "ACT"
+      },
+      "solicitation": {
+        "enum": [
+          "solicited",
+          "unsolicited"
+        ],
+        "x-fidcode": "SOL"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "fund code",
+      "account type",
+      "solicitation"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.3"
+    ],
+    "oneOf": [
+      {
+        "required": [
+          "amount (CAD)"
+        ]
+      },
+      {
+        "required": [
+          "units"
+        ]
+      }
+    ]
+  },
+  "TRF.I": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 TRF.I: account transfer in",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "account transfer in"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "delivering institution": {
+        "type": "string",
+        "x-fidcode": "FROM"
+      },
+      "account type": {
+        "enum": [
+          "non-registered",
+          "RRSP",
+          "RRIF",
+          "TFSA",
+          "FHSA",
+          "RESP",
+          "LIRA"
+        ],
+        "x-fidcode": "ACT"
+      },
+      "transfer form": {
+        "enum": [
+          "cash",
+          "in kind"
+        ],
+        "x-fidcode": "KIND"
+      },
+      "estimated value (CAD)": {
+        "type": "number",
+        "minimum": 0,
+        "x-fidcode": "AMT"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "delivering institution",
+      "account type",
+      "transfer form"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.3(2)"
+    ]
+  },
+  "SUIT.R": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 SUIT.R: suitability review",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "suitability review"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "trigger": {
+        "enum": [
+          "KYC change",
+          "assets transferred in",
+          "change of registered representative",
+          "periodic review",
+          "significant market or life event"
+        ],
+        "x-fidcode": "TRG"
+      },
+      "result": {
+        "enum": [
+          "suitable",
+          "not suitable",
+          "review pending"
+        ],
+        "x-fidcode": "RES"
+      },
+      "action taken": {
+        "enum": [
+          "no action needed",
+          "rebalance recommended",
+          "client advised in writing",
+          "escalated to compliance"
+        ],
+        "x-fidcode": "ACTN"
+      },
+      "review date": {
+        "type": "string",
+        "format": "date",
+        "x-fidcode": "DT"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "trigger",
+      "result",
+      "action taken",
+      "review date"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.3",
+      "CIRO IDPC Rule 3400 series"
+    ]
+  },
+  "VC.H": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 VC.H: temporary hold placed",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "temporary hold placed"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "reason": {
+        "enum": [
+          "suspected financial exploitation",
+          "suspected diminished mental capacity"
+        ],
+        "x-fidcode": "RSN"
+      },
+      "held transaction reference": {
+        "type": "string",
+        "x-fidcode": "TXN"
+      },
+      "client notified on": {
+        "type": "string",
+        "format": "date",
+        "x-fidcode": "NTF"
+      },
+      "next review date": {
+        "type": "string",
+        "format": "date",
+        "x-fidcode": "REVW"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "reason",
+      "held transaction reference",
+      "client notified on",
+      "next review date"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.19"
+    ]
+  },
+  "CMP.R": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 CMP.R: complaint received",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "complaint received"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "category": {
+        "enum": [
+          "suitability",
+          "fees or charges",
+          "service quality",
+          "unauthorized trading",
+          "misrepresentation",
+          "other"
+        ],
+        "x-fidcode": "CAT"
+      },
+      "date received": {
+        "type": "string",
+        "format": "date",
+        "x-fidcode": "RCV"
+      },
+      "acknowledgement due": {
+        "type": "string",
+        "format": "date",
+        "x-fidcode": "ACK"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "category",
+      "date received",
+      "acknowledgement due"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.15",
+      "NI 31-103 s.13.16"
+    ]
+  },
+  "ADDR.U": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 ADDR.U: address change",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "address change"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "address type": {
+        "enum": [
+          "residential",
+          "mailing"
+        ],
+        "x-fidcode": "TYP"
+      },
+      "province": {
+        "enum": [
+          "Alberta",
+          "British Columbia",
+          "Manitoba",
+          "New Brunswick",
+          "Newfoundland and Labrador",
+          "Nova Scotia",
+          "Northwest Territories",
+          "Nunavut",
+          "Ontario",
+          "Prince Edward Island",
+          "Quebec",
+          "Saskatchewan",
+          "Yukon"
+        ],
+        "x-fidcode": "PROV"
+      },
+      "postal code": {
+        "type": "string",
+        "x-fidcode": "PC"
+      },
+      "verification method": {
+        "enum": [
+          "document on file",
+          "call-back to number on file",
+          "government ID re-verified"
+        ],
+        "x-fidcode": "VER"
+      },
+      "effective date": {
+        "type": "string",
+        "format": "date",
+        "x-fidcode": "EF"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "address type",
+      "province",
+      "postal code",
+      "verification method",
+      "effective date"
+    ],
+    "additionalProperties": false,
+    "x-rules": [
+      "NI 31-103 s.13.2"
+    ]
+  },
+  "DOC.R": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 DOC.R: document request",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "document request"
+      },
+      "account": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "document": {
+        "enum": [
+          "KYC form",
+          "identification",
+          "signature",
+          "trusted contact form",
+          "new account application",
+          "transfer authorization"
+        ],
+        "x-fidcode": "DOC"
+      },
+      "due date": {
+        "type": "string",
+        "format": "date",
+        "x-fidcode": "DUE"
+      },
+      "note": {
+        "type": "string",
+        "x-fidcode": "NOTE"
+      }
+    },
+    "required": [
+      "message_type",
+      "account",
+      "document",
+      "due date"
+    ],
+    "additionalProperties": false,
+    "x-rules": []
+  },
+  "ACK": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FIDCODE 0.1 ACK: acknowledgement",
+    "type": "object",
+    "properties": {
+      "message_type": {
+        "const": "acknowledgement"
+      },
+      "ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "status": {
+        "enum": [
+          "accepted",
+          "rejected",
+          "pending"
+        ],
+        "x-fidcode": "ST"
+      },
+      "reason": {
+        "enum": [
+          "missing field",
+          "invalid value",
+          "not authorized",
+          "duplicate",
+          "other"
+        ],
+        "x-fidcode": "RC"
+      },
+      "field concerned": {
+        "type": "string",
+        "x-fidcode": "F"
+      }
+    },
+    "required": [
+      "message_type",
+      "status"
+    ],
+    "additionalProperties": false,
+    "x-rules": []
+  }
+}

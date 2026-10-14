@@ -1,0 +1,26 @@
+# Sample messages. Accounts, names and fund codes are fictional.
+# "prose" is how the same instruction typically reads in an email or chat.
+- compact: 'KYC.U @A10293 RT:L>M TH:5-10>10+ EF:T0 SRC:MTG'
+  prose: "Please update the KYC on account A10293. Following today's in-person meeting, the client's risk tolerance has changed from low to medium and their time horizon is now over 10 years (previously 5 to 10 years). Effective today."
+- compact: 'TCP.U @A10293 NM:"Priya Sharma" REL:CH PH:416-555-0142 CON:Y EF:T0'
+  prose: "Client on account A10293 has named a trusted contact person: Priya Sharma, their adult daughter, phone 416-555-0142. The client has consented to us contacting her. Effective today."
+- compact: 'ORD.B @A20511 FND:FDX101 AMT:25000 ACT:TFSA SOL:S'
+  prose: "Purchase order for account A20511: buy $25,000 of fund FDX101 in the client's TFSA. This trade was solicited by the advisor."
+- compact: 'ORD.R @A20511 FND:FDX205 UN:1200 ACT:RRSP SOL:U'
+  prose: "Redemption request for account A20511: sell 1,200 units of fund FDX205 from the RRSP. The client initiated this request; it was not solicited."
+- compact: 'ORD.X @A30877 FND:FDX101>FDX310 AMT:10000 ACT:NR SOL:S'
+  prose: "Please process a switch on non-registered account A30877: move $10,000 from fund FDX101 into fund FDX310. This switch was recommended by the advisor."
+- compact: 'TRF.I @A41290 FROM:"Northshore Securities" ACT:RRSP KIND:K AMT:182000'
+  prose: "Incoming transfer for account A41290: the client is moving their RRSP from Northshore Securities, in kind, with an estimated value of $182,000."
+- compact: 'SUIT.R @A41290 TRG:TRF RES:U ACTN:ADV DT:T0'
+  prose: "Suitability review completed today on account A41290, triggered by the incoming transfer of assets. The holdings were found not suitable for the client's KYC profile, and the client has been advised in writing."
+- compact: 'VC.H @A50013 RSN:FX TXN:W88213 NTF:T0 REVW:261028'
+  prose: "We have placed a temporary hold on account A50013 due to suspected financial exploitation. The held transaction is withdrawal W88213. The client was notified of the hold today, and we will review it again on October 28, 2026."
+- compact: 'CMP.R @A50740 CAT:FEES RCV:261013 ACK:261020'
+  prose: "A complaint was received on October 13, 2026 from the client on account A50740 regarding fees and charges. Our written acknowledgement is due by October 20, 2026."
+- compact: 'ADDR.U @A61002 TYP:RES PROV:BC PC:V6B1A1 VER:CALL EF:T0'
+  prose: "Address change for account A61002: the client's residential address is now in British Columbia, postal code V6B 1A1. We verified the change by calling back the phone number on file. Effective today."
+- compact: 'DOC.R @A70154 DOC:KYCF DUE:261104 NOTE:"annual update"'
+  prose: "Document request for account A70154: we need a signed KYC form from the client for their annual update. Please obtain it by November 4, 2026."
+- compact: 'ACK #M55102 ST:REJ RC:MISS F:SRC'
+  prose: "Regarding your message M55102: we have rejected it because a required field is missing, namely the source of the KYC information."

@@ -1,0 +1,166 @@
+# FIDCODE codebook, draft 0.1
+# A compact message vocabulary for AI-to-AI and system-to-system
+# communication between Canadian securities and mutual fund dealers.
+#
+# Wire grammar (one message per line):
+#   MESSAGE := TYPE [SP "@" ACCOUNT] [SP "#" REF] (SP FIELD)*
+#   FIELD   := CODE ":" VALUE
+#   VALUE   := TOKEN | TOKEN ">" TOKEN        (a change: from > to)
+#            | '"' free text '"'
+#   DATE    := YYMMDD | "T0" (today)
+#
+# Rule references are DRAFTS for discussion. They have not been
+# reviewed by counsel and must be verified before any reliance.
+
+version: "0.1"
+name: FIDCODE
+
+enums:
+  risk:      {L: low, LM: low to medium, M: medium, MH: medium to high, H: high}
+  horizon:   {"<1": under 1 year, "1-3": 1 to 3 years, "3-5": 3 to 5 years, "5-10": 5 to 10 years, "10+": over 10 years}
+  objective: {PRS: capital preservation, INC: income, BAL: balanced, GRO: growth, AGR: aggressive growth}
+  acct_type: {NR: non-registered, RRSP: RRSP, RRIF: RRIF, TFSA: TFSA, FHSA: FHSA, RESP: RESP, LIRA: LIRA}
+  kyc_source: {MTG: in-person meeting, CALL: phone call, VID: video meeting, FORM: client-signed form, PORT: client portal}
+  relation:  {SP: spouse or partner, CH: adult child, SIB: sibling, FR: friend, PRO: professional advisor, OTH: other}
+  yes_no:    {"Y": "yes", "N": "no"}
+  solicited: {S: solicited, U: unsolicited}
+  kind:      {C: cash, K: in kind}
+  trigger:   {KYC: KYC change, TRF: assets transferred in, REP: change of registered representative, PER: periodic review, EVT: significant market or life event}
+  suit_result: {S: suitable, U: not suitable, P: review pending}
+  suit_action: {NONE: no action needed, REBAL: rebalance recommended, ADV: client advised in writing, ESC: escalated to compliance}
+  hold_reason: {FX: suspected financial exploitation, DMC: suspected diminished mental capacity}
+  complaint: {SUIT: suitability, FEES: fees or charges, SVC: service quality, UNA: unauthorized trading, MIS: misrepresentation, OTH: other}
+  addr_type: {RES: residential, MAIL: mailing}
+  province:  {"AB": Alberta, BC: British Columbia, MB: Manitoba, NB: New Brunswick, NL: Newfoundland and Labrador, NS: Nova Scotia, NT: Northwest Territories, NU: Nunavut, "ON": Ontario, PE: Prince Edward Island, QC: Quebec, SK: Saskatchewan, YT: Yukon}
+  verify:    {DOC: document on file, CALL: call-back to number on file, ID: government ID re-verified}
+  doc:       {KYCF: KYC form, ID: identification, SIG: signature, TCPF: trusted contact form, NAAF: new account application, TRFF: transfer authorization}
+  status:    {OK: accepted, REJ: rejected, PEND: pending}
+  reason:    {MISS: missing field, INV: invalid value, AUTH: not authorized, DUP: duplicate, OTH: other}
+
+# Field value types: enum, change (enum from>to), date, number, id, text
+types:
+  KYC.U:
+    name: KYC update
+    account: required
+    fields:
+      RT:  {name: risk tolerance, type: change, enum: risk}
+      RC:  {name: risk capacity, type: change, enum: risk}
+      TH:  {name: time horizon, type: change, enum: horizon}
+      IO:  {name: investment objective, type: change, enum: objective}
+      EF:  {name: effective date, type: date, required: true}
+      SRC: {name: information source, type: enum, enum: kyc_source, required: true}
+    rules: ["NI 31-103 s.13.2", "CIRO IDPC Rule 3200 series", "CIRO MFD Rule 2.2.1"]
+
+  TCP.U:
+    name: trusted contact person update
+    account: required
+    fields:
+      NM:  {name: contact name, type: text, required: true}
+      REL: {name: relationship, type: enum, enum: relation, required: true}
+      PH:  {name: phone, type: text}
+      CON: {name: client consent to contact, type: enum, enum: yes_no, required: true}
+      EF:  {name: effective date, type: date, required: true}
+    rules: ["NI 31-103 s.13.2(2)(e)", "NI 31-103 s.13.19"]
+
+  ORD.B:
+    name: purchase order
+    account: required
+    fields:
+      FND: {name: fund code, type: id, required: true}
+      AMT: {name: amount (CAD), type: number, required: true}
+      ACT: {name: account type, type: enum, enum: acct_type, required: true}
+      SOL: {name: solicitation, type: enum, enum: solicited, required: true}
+    rules: ["NI 31-103 s.13.3"]
+
+  ORD.R:
+    name: redemption order
+    account: required
+    fields:
+      FND: {name: fund code, type: id, required: true}
+      AMT: {name: amount (CAD), type: number}
+      UN:  {name: units, type: number}
+      ACT: {name: account type, type: enum, enum: acct_type, required: true}
+      SOL: {name: solicitation, type: enum, enum: solicited, required: true}
+    one_of: [[AMT, UN]]
+    rules: ["NI 31-103 s.13.3"]
+
+  ORD.X:
+    name: fund switch
+    account: required
+    fields:
+      FND: {name: fund code, type: change}
+      AMT: {name: amount (CAD), type: number}
+      UN:  {name: units, type: number}
+      ACT: {name: account type, type: enum, enum: acct_type, required: true}
+      SOL: {name: solicitation, type: enum, enum: solicited, required: true}
+    required_change: [FND]
+    one_of: [[AMT, UN]]
+    rules: ["NI 31-103 s.13.3"]
+
+  TRF.I:
+    name: account transfer in
+    account: required
+    fields:
+      FROM: {name: delivering institution, type: text, required: true}
+      ACT:  {name: account type, type: enum, enum: acct_type, required: true}
+      KIND: {name: transfer form, type: enum, enum: kind, required: true}
+      AMT:  {name: estimated value (CAD), type: number}
+    rules: ["NI 31-103 s.13.3(2)"]
+
+  SUIT.R:
+    name: suitability review
+    account: required
+    fields:
+      TRG:  {name: trigger, type: enum, enum: trigger, required: true}
+      RES:  {name: result, type: enum, enum: suit_result, required: true}
+      ACTN: {name: action taken, type: enum, enum: suit_action, required: true}
+      DT:   {name: review date, type: date, required: true}
+    rules: ["NI 31-103 s.13.3", "CIRO IDPC Rule 3400 series"]
+
+  VC.H:
+    name: temporary hold placed
+    account: required
+    fields:
+      RSN:  {name: reason, type: enum, enum: hold_reason, required: true}
+      TXN:  {name: held transaction reference, type: id, required: true}
+      NTF:  {name: client notified on, type: date, required: true}
+      REVW: {name: next review date, type: date, required: true}
+    rules: ["NI 31-103 s.13.19"]
+
+  CMP.R:
+    name: complaint received
+    account: required
+    fields:
+      CAT: {name: category, type: enum, enum: complaint, required: true}
+      RCV: {name: date received, type: date, required: true}
+      ACK: {name: acknowledgement due, type: date, required: true}
+    rules: ["NI 31-103 s.13.15", "NI 31-103 s.13.16"]
+
+  ADDR.U:
+    name: address change
+    account: required
+    fields:
+      TYP:  {name: address type, type: enum, enum: addr_type, required: true}
+      PROV: {name: province, type: enum, enum: province, required: true}
+      PC:   {name: postal code, type: id, required: true}
+      VER:  {name: verification method, type: enum, enum: verify, required: true}
+      EF:   {name: effective date, type: date, required: true}
+    rules: ["NI 31-103 s.13.2"]
+
+  DOC.R:
+    name: document request
+    account: required
+    fields:
+      DOC: {name: document, type: enum, enum: doc, required: true}
+      DUE: {name: due date, type: date, required: true}
+      NOTE: {name: note, type: text}
+    rules: []
+
+  ACK:
+    name: acknowledgement
+    account: none
+    fields:
+      ST:  {name: status, type: enum, enum: status, required: true}
+      RC:  {name: reason, type: enum, enum: reason}
+      F:   {name: field concerned, type: id}
+    rules: []

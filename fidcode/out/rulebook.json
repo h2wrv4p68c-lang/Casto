@@ -1,0 +1,136 @@
+{
+  "KYC.U": {
+    "name": "KYC update",
+    "rules": [
+      "NI 31-103 s.13.2",
+      "CIRO IDPC Rule 3200 series",
+      "CIRO MFD Rule 2.2.1"
+    ],
+    "required_fields": [
+      "effective date",
+      "information source"
+    ]
+  },
+  "TCP.U": {
+    "name": "trusted contact person update",
+    "rules": [
+      "NI 31-103 s.13.2(2)(e)",
+      "NI 31-103 s.13.19"
+    ],
+    "required_fields": [
+      "contact name",
+      "relationship",
+      "client consent to contact",
+      "effective date"
+    ]
+  },
+  "ORD.B": {
+    "name": "purchase order",
+    "rules": [
+      "NI 31-103 s.13.3"
+    ],
+    "required_fields": [
+      "fund code",
+      "amount (CAD)",
+      "account type",
+      "solicitation"
+    ]
+  },
+  "ORD.R": {
+    "name": "redemption order",
+    "rules": [
+      "NI 31-103 s.13.3"
+    ],
+    "required_fields": [
+      "fund code",
+      "account type",
+      "solicitation"
+    ]
+  },
+  "ORD.X": {
+    "name": "fund switch",
+    "rules": [
+      "NI 31-103 s.13.3"
+    ],
+    "required_fields": [
+      "account type",
+      "solicitation"
+    ]
+  },
+  "TRF.I": {
+    "name": "account transfer in",
+    "rules": [
+      "NI 31-103 s.13.3(2)"
+    ],
+    "required_fields": [
+      "delivering institution",
+      "account type",
+      "transfer form"
+    ]
+  },
+  "SUIT.R": {
+    "name": "suitability review",
+    "rules": [
+      "NI 31-103 s.13.3",
+      "CIRO IDPC Rule 3400 series"
+    ],
+    "required_fields": [
+      "trigger",
+      "result",
+      "action taken",
+      "review date"
+    ]
+  },
+  "VC.H": {
+    "name": "temporary hold placed",
+    "rules": [
+      "NI 31-103 s.13.19"
+    ],
+    "required_fields": [
+      "reason",
+      "held transaction reference",
+      "client notified on",
+      "next review date"
+    ]
+  },
+  "CMP.R": {
+    "name": "complaint received",
+    "rules": [
+      "NI 31-103 s.13.15",
+      "NI 31-103 s.13.16"
+    ],
+    "required_fields": [
+      "category",
+      "date received",
+      "acknowledgement due"
+    ]
+  },
+  "ADDR.U": {
+    "name": "address change",
+    "rules": [
+      "NI 31-103 s.13.2"
+    ],
+    "required_fields": [
+      "address type",
+      "province",
+      "postal code",
+      "verification method",
+      "effective date"
+    ]
+  },
+  "DOC.R": {
+    "name": "document request",
+    "rules": [],
+    "required_fields": [
+      "document",
+      "due date"
+    ]
+  },
+  "ACK": {
+    "name": "acknowledgement",
+    "rules": [],
+    "required_fields": [
+      "status"
+    ]
+  }
+}
