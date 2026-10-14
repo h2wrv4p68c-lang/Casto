@@ -23,6 +23,21 @@ values and related regulatory obligations. Everything else derives from it:
 | Rulebook map | `python fidcode.py rulebook` | Message type to obligation (`out/rulebook.json`) |
 | AI system prompt | `python fidcode.py prompt` | Teaches a model the codebook (`out/codebook-prompt.txt`) |
 
+## Three layers, one codebook
+
+| Layer | Example size (KYC update) | For |
+|---|---|---|
+| Plain language | 225 bytes | people, books and records |
+| Compact text | 46 bytes | AI models, which read text tokens |
+| Binary (`binary.py`) | 9 bytes (72 bits) | machine transport, storage, QR codes |
+
+In the binary layer each field takes only the bits its value list needs,
+so a risk-tolerance change costs 7 bits, less than one character. The
+code space grows by doubling with every bit, and field codes are scoped
+to their message type, so there is no practical ceiling on the number of
+codes. One KYC update fits the smallest QR code (21 x 21); all 12 sample
+messages fit one 57 x 57 QR code (`out/qr-kyc.svg`, `out/qr-all12.svg`).
+
 ## Example
 
 ```
@@ -91,7 +106,7 @@ format; it needs API credentials and has not been run yet.
 ## Running
 
 ```
-pip install pyyaml pytest tiktoken      # anthropic for live counts and llm_eval.py
+pip install pyyaml pytest tiktoken segno      # anthropic for live counts and llm_eval.py
 python -m pytest -q
 python benchmark.py > RESULTS.md
 python llm_eval.py                      # needs ANTHROPIC_API_KEY
