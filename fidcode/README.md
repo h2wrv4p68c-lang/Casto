@@ -1,9 +1,14 @@
 # FIDCODE: draft 0.1
 
-A compact, machine-readable message vocabulary for communication between
+A standard, machine-readable message vocabulary for communication between
 AI agents and systems at Canadian securities and mutual fund dealers.
 It is a proof of concept prepared for discussion by the
 [Federation of Independent Dealers](https://www.IndependentDealers.ca).
+
+The purpose is standardization. When every firm and every AI system uses
+the same symbols for the same events, compliance can be tested
+automatically, the moment a message is logged. Smaller messages are a
+side benefit.
 
 One codebook (`codebook.yaml`) defines the message types, fields, allowed
 values and related regulatory obligations. Everything else derives from it:
@@ -34,6 +39,33 @@ KYC update for account A10293.
 - Information source: in-person meeting
 - Related obligations (draft): NI 31-103 s.13.2, CIRO IDPC Rule 3200 series, CIRO MFD Rule 2.2.1
 ```
+
+## Automated compliance testing
+
+`compliance.py` reads a timestamped log of FIDCODE messages and tests it
+against obligations written as code. Each finding names the check, the
+account, the rule reference and the log lines it relies on.
+
+```
+python compliance.py sample_log.txt          # report
+python compliance.py sample_log.txt --json   # machine-readable findings
+```
+
+| Check | Tests that |
+|---|---|
+| C0 | every message is well-formed under the codebook |
+| C1 | a KYC profile change is followed by a suitability review within 30 days |
+| C2 | a transfer in is followed by a suitability review within 30 days |
+| C3 | an unsuitable result records an action |
+| C4 | a temporary hold has prompt client notice and a review within 30 days |
+| C5 | no redemption or switch is placed while a hold is open |
+| C6 | a complaint acknowledgement is due within 5 business days |
+| C7 | a rejected instruction is corrected and re-sent |
+
+The sample log contains 8 deliberate failures; the checker finds all
+8 and passes the 7 compliant cases. Time limits are parameters
+(`PARAMS` in `compliance.py`), so a firm or regulator can set them.
+The checks are illustrative drafts, not legal interpretations.
 
 ## Message types (12)
 
