@@ -38,6 +38,18 @@ to their message type, so there is no practical ceiling on the number of
 codes. One KYC update fits the smallest QR code (21 x 21); all 12 sample
 messages fit one 57 x 57 QR code (`out/qr-kyc.svg`, `out/qr-all12.svg`).
 
+## Ten-symbol Micro QR frame
+
+`strip.py` defines a fixed frame of ten Micro QR symbols (M4, 17 x 17,
+13 bytes each): a header (codebook version, firm, frame number, time),
+eight payload symbols (96 bytes, about four to six messages), and a
+96-bit seal that detects any alteration. Symbols carry their position,
+so they can be scanned in any order. `out/strip.png` holds one client
+meeting: KYC update, trusted contact, address change and suitability review.
+
+The seal in the prototype uses a shared demo key; production use would
+need per-firm keys or digital signatures.
+
 ## Example
 
 ```
