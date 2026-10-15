@@ -1,0 +1,8 @@
+timestamp,message_type,account,ref,risk tolerance from,risk tolerance to,time horizon from,time horizon to,effective date,information source,trigger,result,action taken,review date,fund code,amount (CAD),account type,solicitation,category,date received,acknowledgement due,reason,held transaction reference,client notified on,next review date,status,field concerned
+2026-10-01T09:20,KYC update,A10293,M3001,low,medium,5 to 10 years,over 10 years,2026-10-01,in-person meeting,,,,,,,,,,,,,,,,,
+2026-10-02T11:05,KYC update,A20511,M3002,M,H,,,2026-10-02,,,,,,,,,,,,,,,,,,
+2026-10-06T14:00,suitability review,A10293,M3003,,,,,,,KYC change,suitable,no action needed,2026-10-06,,,,,,,,,,,,,
+2026-10-07T10:15,purchase order,A20511,M3004,,,,,,,,,,,FDX101,"25,000",TFSA,solicited,,,,,,,,,
+2026-10-08T09:00,complaint received,A50741,M3005,,,,,,,,,,,,,,,fees or charges,2026-10-08,2026-10-14,,,,,,
+2026-10-09T16:40,temporary hold placed,A50013,M3006,,,,,,,,,,,,,,,,,,suspected financial exploitation,W88213,2026-10-09,2026-10-30,,
+2026-10-09T16:45,purchase order,A30877,M3007,,,,,,,,,,,FDX310,1500,RESP,maybe,,,,,,,,,

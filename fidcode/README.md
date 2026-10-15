@@ -67,6 +67,25 @@ KYC update for account A10293.
 - Related obligations (draft): NI 31-103 s.13.2, CIRO IDPC Rule 3200 series, CIRO MFD Rule 2.2.1
 ```
 
+## Log export for regulators
+
+`export.py` is the piece a dealer would run. It takes a CSV of events
+exported from a back-office, CRM or AI system and writes a log package:
+
+| File | Contents |
+|---|---|
+| `messages.log` | one timestamped FIDCODE message per line, the record itself |
+| `messages.jsonl` | the same messages decoded, for regulators' systems |
+| `rejected.csv` | rows that failed validation, each with the reason |
+| `manifest.json` | firm, period, codebook version, counts, file hashes, hash chain |
+
+```
+python export.py sample_events.csv --firm 4417 --period 2026-10 --out out/
+python export.py --verify out/FIRM4417_2026-10     # anyone can re-check a package
+```
+
+Any change to a delivered package, even one digit, fails verification.
+
 ## Automated compliance testing
 
 `compliance.py` reads a timestamped log of FIDCODE messages and tests it

@@ -1,0 +1,23 @@
+{
+  "format": "FIDCODE log package",
+  "codebook_version": "0.1",
+  "firm": 4417,
+  "period": "2026-10",
+  "created": "2026-10-15T00:16:40+00:00",
+  "source_rows": 7,
+  "messages": 5,
+  "rejected": 2,
+  "by_type": {
+    "KYC.U": 1,
+    "ORD.B": 1,
+    "SUIT.R": 1,
+    "VC.H": 1,
+    "CMP.R": 1
+  },
+  "chain_head": "ac51bc3dbd4b6b1c9717602c8d1ff4dbe5a97ad96089bca2afcf136713179e27",
+  "files": {
+    "messages.log": "2b793535823e2055a6557c87a60c1a6677e836cdd103da9f3c19837c3d857c07",
+    "messages.jsonl": "44dd4faea3e2c850d463eae3e8315c7ba72ae2a624970bb1a66967ffcf28ec45",
+    "rejected.csv": "d526673d3958f6f4e527c65431c32d03d154050f3036c26168fbd207580e2982"
+  }
+}

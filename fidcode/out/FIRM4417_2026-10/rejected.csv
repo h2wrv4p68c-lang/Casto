@@ -1,0 +1,3 @@
+csv_line,error,timestamp,message_type,account,ref,risk tolerance from,risk tolerance to,time horizon from,time horizon to,effective date,information source,trigger,result,action taken,review date,fund code,amount (CAD),account type,solicitation,category,date received,acknowledgement due,reason,held transaction reference,client notified on,next review date,status,field concerned
+3,missing required field SRC (information source),2026-10-02T11:05,KYC update,A20511,M3002,M,H,,,2026-10-02,,,,,,,,,,,,,,,,,,
+8,"solicitation: 'maybe' is not one of ['solicited', 'unsolicited']",2026-10-09T16:45,purchase order,A30877,M3007,,,,,,,,,,,FDX310,1500,RESP,maybe,,,,,,,,,
