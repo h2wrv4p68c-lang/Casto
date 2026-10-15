@@ -24,7 +24,7 @@ PARAMS = {
     "suitability_after_transfer_days": 30,  # policy
     "hold_notice_days": 1,                  # policy reading of "as soon as possible"
     "hold_review_max_days": 30,
-    "complaint_ack_business_days": 5,
+    "complaint_ack_business_days": 5,      # policy; s.13.16(2) says "as soon as possible"
 }
 
 
@@ -134,11 +134,11 @@ def check_suitability_after_transfer(msgs, as_of):
                            and x.fields["TRG"] == "TRF", n)
         if hit:
             out.append(Finding("C2 suitability review after transfer in", "PASS",
-                               ["NI 31-103 s.13.3(2)"], m.account,
+                               ["NI 31-103 s.13.3(1)"], m.account,
                                f"reviewed on {hit.ts.date()}", [m.line, hit.line]))
         elif as_of > m.ts + timedelta(days=n):
             out.append(Finding("C2 suitability review after transfer in", "FAIL",
-                               ["NI 31-103 s.13.3(2)"], m.account,
+                               ["NI 31-103 s.13.3(1)"], m.account,
                                f"no suitability review within {n} days of transfer on {m.ts.date()}",
                                [m.line]))
     return out
@@ -193,7 +193,7 @@ def check_complaint_ack(msgs, as_of):
         due = _d(m.data["acknowledgement due"])
         ok = due <= limit
         out.append(Finding("C6 complaint acknowledgement deadline", "PASS" if ok else "FAIL",
-                           ["NI 31-103 s.13.15"], m.account,
+                           ["NI 31-103 s.13.16(2)"], m.account,
                            f"acknowledgement due {due}; limit {limit} ({n} business days)",
                            [m.line]))
     return out

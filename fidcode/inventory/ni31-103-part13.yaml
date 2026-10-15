@@ -1,0 +1,1470 @@
+# FIDCODE obligation inventory: NI 31-103 Part 13
+# "Dealing with clients - individuals and firms"
+#
+# FIRST PASS FOR REVIEW. Classifications below were prepared from the
+# unofficial BCSC consolidation and have not been reviewed by counsel or
+# compliance staff. Summaries are paraphrases, not the rule text.
+#
+# Field guide
+#   kind: operative | conditional_exemption | scope | definition | interpretive | repealed
+#         Only "operative" and "conditional_exemption" entries carry a classification.
+#   category: event | data | judgment | mixed
+#   fidcode_status: covered | extendable | review_only | not_testable
+#   message_types.existing: codes in codebook.yaml v0.1
+#   message_types.proposed: new codes suggested here (names in proposed_type_names below
+#         are repeated in SUMMARY.md)
+#   message_types.field_extensions: new fields or enum values on existing types
+#   sro_member_exemption: where the NI itself exempts CIRO (formerly IIROC/MFDA) members
+#         or their dealing representatives, conditional on complying with the SRO's
+#         corresponding provisions (NI 31-103 ss. 3.16, 9.3, 9.4).
+
+source_url: "https://www.bcsc.bc.ca/-/media/PWS/New-Resources/Securities-Law/Instruments-and-Policies/Policy-3/31103-NI-June-16-2026.pdf"
+source_date: "2026-01-01 (unofficial consolidation 'effective as of January 1, 2026'; BCSC published date 2026-06-16; landing page https://www.bcsc.bc.ca/securities-law/law-and-policy/instruments-and-policies/3-registration-requirements-related-matters/current/31-103/31103-ni-june-16-2026; PDF sha256 68b10d650931def80b710ef552ab29858df1feca358a8eba2a66700d2ea7e6fb)"
+retrieved: "2026-10-15"
+
+provisions:
+
+# ======================================================================
+# Division 1 - Know your client, know your product and suitability determination
+# ======================================================================
+
+- id: "13.1"
+  heading: "Investment fund managers exempt from this Division"
+  division: "Division 1"
+  kind: scope
+  summary: "Division 1 does not apply to an investment fund manager acting in that capacity."
+
+- id: "13.2(1)"
+  heading: "Know your client"
+  division: "Division 1"
+  kind: definition
+  summary: "In Ontario, Nova Scotia and New Brunswick, 'insider' for paragraph (2)(b) is read to include issuers whose securities are publicly traded."
+
+- id: "13.2(2)(a)"
+  heading: "Know your client - identity and reputation"
+  division: "Division 1"
+  kind: operative
+  summary: "The registrant must take reasonable steps to establish the client's identity and, where it has cause for concern, make reasonable inquiries into the client's reputation."
+  applies_to: ["registrant (all categories; investment fund managers excluded by 13.1)"]
+  trigger: "establishing a client relationship (no timing words in 13.2(2) itself; 13.2.01(1) ties trusted-contact steps to the same time)"
+  required_action: "Verify identity; inquire into reputation if there is cause for concern."
+  deadline: null
+  category: mixed
+  testable_part: "That an identity verification record (method, date) exists before the first order on an account. Whether there was 'cause for concern' and whether inquiries were adequate is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["ACCT.O"]
+    field_extensions: ["ACCT.O IDV (identity verification method) and IDD (date)"]
+  check_sketch: "Every account with an ORD.* message must have a prior ACCT.O carrying IDV and IDD; reputation inquiries are not checkable."
+  vague_terms: ["reasonable steps", "cause for concern", "reasonable inquiries"]
+
+- id: "13.2(2)(b)"
+  heading: "Know your client - insider status"
+  division: "Division 1"
+  kind: operative
+  summary: "The registrant must take reasonable steps to establish whether the client is an insider of a reporting issuer or other publicly traded issuer."
+  applies_to: ["registrant"]
+  trigger: "establishing a client relationship"
+  required_action: "Record whether the client is an insider (and of which issuer)."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["ACCT.O"]
+    field_extensions: ["ACCT.O INS (insider Y/N) and INSI (issuer ids)"]
+  check_sketch: "ACCT.O must carry an INS value; orders in an issuer listed in INSI can be flagged for review."
+  vague_terms: ["reasonable steps"]
+  notes: "13.2(6) disapplies this paragraph where the registrant only trades securities in 7.1(2)(b) and (c)."
+
+- id: "13.2(2)(c)"
+  heading: "Know your client - information sufficient for suitability"
+  division: "Division 1"
+  kind: operative
+  summary: "The registrant must take reasonable steps to hold enough information on the client's personal and financial circumstances, needs and objectives, investment knowledge, risk profile and time horizon to meet its suitability obligation."
+  applies_to: ["registrant"]
+  trigger: "establishing a client relationship, and ongoing"
+  required_action: "Collect the six listed KYC elements."
+  deadline: null
+  category: mixed
+  testable_part: "Presence of each of the six elements on the account record is testable. Whether the information is 'sufficient' is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: ["KYC.U"]
+    proposed: ["ACCT.O"]
+    field_extensions: ["KYC.U / ACCT.O: KN (investment knowledge), FIN (financial circumstances summary), PC (personal circumstances); KYC.U already has RT, RC, TH, IO"]
+  check_sketch: "Before the first ORD.* on an account, the latest KYC state must have non-empty RT, RC, TH, IO, KN, FIN and PC."
+  vague_terms: ["reasonable steps", "sufficient information"]
+  notes: "KYC.U today covers risk tolerance, risk capacity, horizon and objective only; knowledge and personal/financial circumstances have no field."
+
+- id: "13.2(2)(d)"
+  heading: "Know your client - creditworthiness when financing"
+  division: "Division 1"
+  kind: operative
+  summary: "If the registered firm finances a client's purchase of a security, the registrant must take reasonable steps to establish the client's creditworthiness."
+  applies_to: ["registrant (where the registered firm finances the purchase)"]
+  trigger: "the firm finances a client's acquisition of a security"
+  required_action: "Assess creditworthiness before extending financing."
+  deadline: null
+  category: mixed
+  testable_part: "That a credit assessment record precedes the financing event. The assessment itself is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["LND.X"]
+    field_extensions: ["LND.X CRD (credit assessment date)"]
+  check_sketch: "Each LND.X where the firm lends to a client for a purchase must carry a CRD on or before the loan date."
+  vague_terms: ["reasonable steps"]
+
+- id: "13.2(3)"
+  heading: "Know your client - identity of corporations, partnerships and trusts"
+  division: "Division 1"
+  kind: operative
+  summary: "For a corporate, partnership or trust client, the registrant must establish the nature of the business and identify individuals who own or control more than 25% of voting rights (corporations) or control the affairs (partnerships and trusts)."
+  applies_to: ["registrant with non-individual clients"]
+  trigger: "establishing identity of a corporation, partnership or trust client"
+  required_action: "Record nature of business and the controlling individuals."
+  deadline: null
+  category: mixed
+  testable_part: "Presence of business-nature and controlling-person records for non-individual clients; the 25% threshold is a bright line if ownership percentages are logged. Accuracy needs review."
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["ACCT.O"]
+    field_extensions: ["ACCT.O CT (client type IND/CORP/PART/TRUST), BUS (nature of business), BO (controlling persons with percentage)"]
+  check_sketch: "For ACCT.O with CT in CORP/PART/TRUST, require BUS and at least one BO entry; for CORP, flag any BO with percentage over 25 that lacks identity data."
+  vague_terms: []
+  sro_member_exemption: "Not applicable to an IIROC (now CIRO) member investment dealer (9.3(1)(i), 9.3(2)(d)) or its dealing representatives (3.16(1)(a)) if they comply with corresponding SRO provisions."
+
+- id: "13.2(3.1)"
+  heading: "Know your client - client confirmation"
+  division: "Division 1"
+  kind: operative
+  summary: "Within a reasonable time after receiving KYC information, the registrant must take reasonable steps to have the client confirm its accuracy."
+  applies_to: ["registrant"]
+  trigger: "receipt of KYC information collected under 13.2(2)"
+  required_action: "Obtain client confirmation of the KYC information."
+  deadline: "Within a reasonable time after receiving the information"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: ["KYC.U"]
+    proposed: ["KYC.C", "ACCT.O"]
+    field_extensions: []
+  check_sketch: "Each ACCT.O and each KYC.U must be followed by a KYC.C for the same account within N days (N is a firm or regulator parameter)."
+  vague_terms: ["within a reasonable time", "reasonable steps"]
+
+- id: "13.2(4)"
+  heading: "Know your client - keeping information current"
+  division: "Division 1"
+  kind: operative
+  summary: "The registrant must take reasonable steps to keep KYC information current, including updating it within a reasonable time after becoming aware of a significant change."
+  applies_to: ["registrant"]
+  trigger: "ongoing; and the registrant becoming aware of a significant change in client information"
+  required_action: "Update KYC information."
+  deadline: "within a reasonable time after the registrant becomes aware of a significant change"
+  category: mixed
+  testable_part: "Lag between awareness date and KYC.U effective date is testable if awareness is logged. Whether a change is 'significant' is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: ["KYC.U", "ADDR.U"]
+    proposed: []
+    field_extensions: ["KYC.U AW (date registrant became aware)"]
+  check_sketch: "For each KYC.U, EF minus AW must be within N days."
+  vague_terms: ["reasonable steps", "within a reasonable time", "significant change"]
+
+- id: "13.2(4.1)"
+  heading: "Know your client - periodic review"
+  division: "Division 1"
+  kind: operative
+  summary: "The registrant must review the 13.2(2)(c) information at least every 12 months for managed accounts, within 12 months before an exempt market dealer trades for or recommends to the client, and at least every 36 months otherwise."
+  applies_to: ["registrant; separate rules for managed accounts and exempt market dealers"]
+  trigger: "elapsed time since last review; for EMDs, a trade or recommendation"
+  required_action: "Review the client's KYC information."
+  deadline: "no less frequently than once every 12 months (managed accounts); within 12 months before making a trade for, or recommending a trade to, the client (EMD); no less frequently than once every 36 months (other cases)"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["KYC.R", "ACCT.O"]
+    field_extensions: ["ACCT.O MGD (managed account Y/N)"]
+  check_sketch: "Per account, the gap between consecutive KYC.R messages (or ACCT.O and first KYC.R) must not exceed 12 months if MGD:Y, else 36 months; for EMD firms, every ORD.* must have a KYC.R in the prior 12 months."
+  vague_terms: []
+  notes: "Bright-line deadlines. Subsection (7) and 13.3.1 waivers disapply it in stated cases."
+
+- id: "13.2(5)"
+  heading: "Know your client - client exclusions"
+  division: "Division 1"
+  kind: scope
+  summary: "Section 13.2 does not apply if the client is a registered firm, a Canadian financial institution or a Schedule III bank."
+
+- id: "13.2(6)"
+  heading: "Know your client - insider paragraph exclusion"
+  division: "Division 1"
+  kind: scope
+  summary: "Paragraph (2)(b) does not apply where the registrant only trades securities referred to in paragraphs 7.1(2)(b) and (c) for the client."
+
+- id: "13.2(7)"
+  heading: "Know your client - dealer acting on adviser direction"
+  division: "Division 1"
+  kind: scope
+  summary: "Paragraph (2)(c) and subsection (4.1) do not apply to a dealer that trades for the client only as directed by a registered adviser acting for the client."
+
+- id: "13.2.01(1)"
+  heading: "Know your client - trusted contact person"
+  division: "Division 1"
+  kind: operative
+  summary: "At the same time as taking KYC steps, the registrant must take reasonable steps to obtain the name and contact information of a trusted contact person and the client's written consent to contact that person on the four listed matters."
+  applies_to: ["registrant, for individual clients (13.2.01(3))"]
+  trigger: "concurrently with the KYC steps under 13.2(2)"
+  required_action: "Request trusted contact details and written consent to contact."
+  deadline: "Concurrently with taking the reasonable steps required under subsection 13.2(2)"
+  category: mixed
+  testable_part: "That a TCP.U (or a recorded client refusal) exists at or near account opening. The client may decline, so absence of a contact is not itself a breach; adequacy of 'reasonable steps' is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: ["TCP.U"]
+    proposed: ["ACCT.O"]
+    field_extensions: ["TCP.U CON value D (client declined to name a contact), or a separate declined flag"]
+  check_sketch: "For each ACCT.O with CT:IND, require a TCP.U for the account within N days of ACCT.O, either naming a contact with CON:Y or recording a refusal."
+  vague_terms: ["reasonable steps", "concurrently"]
+  notes: "codebook.yaml cites 'NI 31-103 s.13.2(2)(e)' for TCP.U; no paragraph 13.2(2)(e) exists in the source. The trusted contact obligation is 13.2.01."
+
+- id: "13.2.01(2)"
+  heading: "Know your client - trusted contact person kept current"
+  division: "Division 1"
+  kind: operative
+  summary: "The registrant must take reasonable steps to keep trusted contact information current, including updating it within a reasonable time after learning of a significant change in the client's personal circumstances."
+  applies_to: ["registrant, for individual clients"]
+  trigger: "ongoing; awareness of a significant change in personal circumstances (13.2(2)(c)(i))"
+  required_action: "Update trusted contact information."
+  deadline: "within a reasonable time after the registrant becomes aware of a significant change"
+  category: mixed
+  testable_part: "Lag between a logged personal-circumstances change and a TCP.U review is testable; significance is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: ["TCP.U", "KYC.U"]
+    proposed: []
+    field_extensions: ["KYC.U PC (personal circumstances change) with AW (awareness date)"]
+  check_sketch: "After a KYC.U with a PC change, expect a TCP.U (confirm or update) within N days."
+  vague_terms: ["reasonable steps", "within a reasonable time", "significant change"]
+
+- id: "13.2.01(3)"
+  heading: "Know your client - trusted contact person, non-individual clients"
+  division: "Division 1"
+  kind: scope
+  summary: "Section 13.2.01 does not apply to clients that are not individuals."
+
+- id: "13.2.1(1)(a)"
+  heading: "Know your product - firm assessment"
+  division: "Division 1"
+  kind: operative
+  summary: "A registered firm must not make securities available to clients unless it has taken reasonable steps to assess their structure, features, risks, costs and cost impact."
+  applies_to: ["registered firm"]
+  trigger: "before making a security available to clients"
+  required_action: "Assess the security."
+  deadline: "before the security is made available (stated as a precondition)"
+  category: judgment
+  fidcode_status: review_only
+  message_types:
+    existing: []
+    proposed: ["PRD.A"]
+    field_extensions: ["PRD.A ASD (assessment date) and ASR (assessment document reference)"]
+  check_sketch: "Machine can confirm that each approved security has an assessment reference dated on or before approval; the quality of the assessment needs a person."
+  vague_terms: ["reasonable steps", "relevant aspects"]
+
+- id: "13.2.1(1)(b)"
+  heading: "Know your product - firm approval"
+  division: "Division 1"
+  kind: operative
+  summary: "A registered firm must approve securities before making them available to clients."
+  applies_to: ["registered firm"]
+  trigger: "before making a security available to clients"
+  required_action: "Record approval of the security."
+  deadline: "before the security is made available (stated as a precondition)"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["PRD.A"]
+    field_extensions: []
+  check_sketch: "Maintain the approved list from PRD.A messages; any fund code traded or recommended that has no prior PRD.A approval is a failure (see 13.2.1(3))."
+  vague_terms: ["reasonable steps"]
+
+- id: "13.2.1(1)(c)"
+  heading: "Know your product - monitoring for significant changes"
+  division: "Division 1"
+  kind: operative
+  summary: "A registered firm must take reasonable steps to monitor the securities it makes available for significant changes."
+  applies_to: ["registered firm"]
+  trigger: "ongoing"
+  required_action: "Monitor approved securities and record significant changes."
+  deadline: null
+  category: mixed
+  testable_part: "That each approved security has a monitoring record within a firm-set interval, and that a PRD.C exists when an external feed reports a change. Deciding what is 'significant' is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["PRD.A", "PRD.C"]
+    field_extensions: []
+  check_sketch: "Every security on the approved list has a PRD.C (change or no-change review) within N months."
+  vague_terms: ["reasonable steps", "significant change"]
+
+- id: "13.2.1(2)"
+  heading: "Know your product - individual understanding"
+  division: "Division 1"
+  kind: operative
+  summary: "A registered individual must not buy, sell or recommend a security for a client without taking steps to understand it, including its structure, features, risks and costs."
+  applies_to: ["registered individual"]
+  trigger: "before purchasing, selling or recommending a security for a client"
+  required_action: "Understand the security."
+  deadline: "before the action (stated as a precondition)"
+  category: judgment
+  fidcode_status: not_testable
+  message_types:
+    existing: []
+    proposed: []
+    field_extensions: []
+  check_sketch: "None. A firm could log product-training attestations, but a record would not show the individual understood the security."
+  vague_terms: ["understand"]
+
+- id: "13.2.1(2.1)"
+  heading: "Know your product - steps that are reasonable"
+  division: "Division 1"
+  kind: interpretive
+  summary: "The steps required under (2) are those reasonable to let the individual meet the suitability obligation in 13.3."
+
+- id: "13.2.1(3)"
+  heading: "Know your product - approved securities only"
+  division: "Division 1"
+  kind: operative
+  summary: "A registered individual must not purchase or recommend a security for a client unless the firm has approved it."
+  applies_to: ["registered individual"]
+  trigger: "each purchase or recommendation"
+  required_action: "Purchase or recommend only firm-approved securities."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: ["ORD.B", "ORD.X"]
+    proposed: ["PRD.A", "REC.M"]
+    field_extensions: []
+  check_sketch: "For each ORD.B, each ORD.X (the 'to' fund) and each REC.M of a purchase, the fund code must be on the approved list as of the message timestamp."
+  vague_terms: []
+
+- id: "13.2.1(4)"
+  heading: "Know your product - dealer acting on adviser direction"
+  division: "Division 1"
+  kind: scope
+  summary: "Section 13.2.1 does not apply to a dealer trading a security only as directed by a registered adviser acting for the client."
+
+- id: "13.3(1)"
+  heading: "Suitability determination - before any investment action"
+  division: "Division 1"
+  kind: operative
+  summary: "Before opening an account, trading, transferring, recommending or exercising discretion, the registrant must determine on a reasonable basis that the action is suitable on the five listed factors and puts the client's interest first."
+  applies_to: ["registrant"]
+  trigger: "before opening an account, any purchase, sale, deposit, exchange or transfer, any other investment action, recommendation or exercise of discretion"
+  required_action: "Make and record a suitability determination."
+  deadline: "Before the action"
+  category: mixed
+  testable_part: "That a suitability determination is recorded before each ACCT.O, ORD.*, TRF.I and REC.M; some factor (iii) inputs (concentration) can be checked against firm thresholds. Whether the action is suitable and puts the client's interest first is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: ["ORD.B", "ORD.R", "ORD.X", "TRF.I", "SUIT.R"]
+    proposed: ["ACCT.O", "REC.M"]
+    field_extensions: ["ORD.* SR (reference to the suitability determination)", "SUIT.R TRG value PRE (pre-trade determination)"]
+  check_sketch: "Each ORD.*, TRF.I, ACCT.O and REC.M must reference (SR) a SUIT.R with RES:S dated at or before it, or be followed by the 13.3(2.1) override sequence; optional concentration flag from account holdings."
+  vague_terms: ["on a reasonable basis", "puts the client's interest first", "reasonable range of alternative actions"]
+  sro_member_exemption: "Section 13.3 does not apply to IIROC and MFDA (now CIRO) member firms (9.3(1)(j), 9.3(2)(e), 9.4(1)(i), 9.4(2)(c)) or their dealing representatives (3.16(1)(b), 3.16(2)(a)) that comply with the corresponding SRO provisions."
+  notes: "Transfers and deposits into an account are actions under 13.3(1), not triggers under 13.3(2)."
+
+- id: "13.3(2)(a)"
+  heading: "Suitability review - new responsible individual"
+  division: "Division 1"
+  kind: operative
+  summary: "When a registered individual is designated as responsible for the account, the registrant must review the account and its holdings for suitability and take reasonable steps within a reasonable time."
+  applies_to: ["registrant"]
+  trigger: "a registered individual is designated as responsible for the client's account"
+  required_action: "Review account and securities; take reasonable steps."
+  deadline: "within a reasonable time"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: ["SUIT.R"]
+    proposed: ["REP.A"]
+    field_extensions: []
+  check_sketch: "Each REP.A must be followed by a SUIT.R with TRG:REP for the same account within N days (SUIT.R already has TRG:REP but no message logs the assignment and no check uses it)."
+  vague_terms: ["reasonable steps", "within a reasonable time"]
+  sro_member_exemption: "As for 13.3(1)."
+
+- id: "13.3(2)(b)"
+  heading: "Suitability review - change in a security"
+  division: "Division 1"
+  kind: operative
+  summary: "When the registrant becomes aware of a change in a held security that could make the security or account unsuitable, it must review the account and take reasonable steps within a reasonable time."
+  applies_to: ["registrant"]
+  trigger: "the registrant becomes aware of a change in a security in the client's account that could result in unsuitability"
+  required_action: "Review affected accounts; take reasonable steps."
+  deadline: "within a reasonable time"
+  category: mixed
+  testable_part: "Fan-out from a PRD.C to every account holding the security, each followed by a SUIT.R, is testable. Whether a change 'could result' in unsuitability is judgment (the PRD.C could carry a flag set by a person)."
+  fidcode_status: extendable
+  message_types:
+    existing: ["SUIT.R"]
+    proposed: ["PRD.C"]
+    field_extensions: ["SUIT.R TRG value SEC (security change)", "PRD.C IMP (could affect suitability Y/N)"]
+  check_sketch: "For each PRD.C with IMP:Y, every account holding the security needs a SUIT.R TRG:SEC within N days; requires a holdings snapshot."
+  vague_terms: ["reasonable steps", "within a reasonable time", "could result"]
+  sro_member_exemption: "As for 13.3(1)."
+
+- id: "13.3(2)(c)"
+  heading: "Suitability review - change in client information"
+  division: "Division 1"
+  kind: operative
+  summary: "When the registrant becomes aware of a change in KYC information that could make a holding or the account unsuitable, it must review the account and take reasonable steps within a reasonable time."
+  applies_to: ["registrant"]
+  trigger: "the registrant becomes aware of a change in the client's 13.2(2) information that could result in unsuitability"
+  required_action: "Review the account; take reasonable steps (for example rebalance or advise the client)."
+  deadline: "within a reasonable time"
+  category: mixed
+  testable_part: "KYC.U profile change followed by SUIT.R TRG:KYC within N days (C1), and an unsuitable result having an action (C3). Whether a change 'could result' in unsuitability and whether the action is adequate is judgment."
+  fidcode_status: covered
+  message_types:
+    existing: ["KYC.U", "SUIT.R"]
+    proposed: []
+    field_extensions: []
+  check_sketch: "Existing C1 (SUIT.R TRG:KYC within 30 days of a KYC.U changing RT/RC/TH/IO; 30 days is a policy parameter) and C3 (RES:U requires ACTN other than NONE)."
+  vague_terms: ["reasonable steps", "within a reasonable time", "could result"]
+  sro_member_exemption: "As for 13.3(1)."
+
+- id: "13.3(2)(d)"
+  heading: "Suitability review - after periodic KYC review"
+  division: "Division 1"
+  kind: operative
+  summary: "After reviewing client information under 13.2(4.1), the registrant must review the account for suitability and take reasonable steps within a reasonable time."
+  applies_to: ["registrant"]
+  trigger: "the registrant reviews the client's information under 13.2(4.1)"
+  required_action: "Review the account; take reasonable steps."
+  deadline: "within a reasonable time"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: ["SUIT.R"]
+    proposed: ["KYC.R"]
+    field_extensions: []
+  check_sketch: "Each KYC.R must be followed by a SUIT.R with TRG:PER for the same account within N days."
+  vague_terms: ["reasonable steps", "within a reasonable time"]
+  sro_member_exemption: "As for 13.3(1)."
+
+- id: "13.3(2.1)"
+  heading: "Suitability - client instruction to proceed despite unsuitability"
+  division: "Division 1"
+  kind: conditional_exemption
+  summary: "A registrant may follow a client instruction that does not meet 13.3(1) only after telling the client why, recommending a suitable alternative, and receiving recorded confirmation to proceed."
+  applies_to: ["registrant"]
+  trigger: "a client instruction to take an action the registrant has determined is not suitable"
+  required_action: "Inform the client of the basis, recommend an alternative, obtain recorded confirmation, then execute."
+  deadline: "all three steps before carrying out the instruction"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: ["ORD.B", "ORD.R", "ORD.X", "SUIT.R"]
+    proposed: ["SUIT.O"]
+    field_extensions: []
+  check_sketch: "Any ORD.* referencing a SUIT.R with RES:U must be preceded by a SUIT.O for the same account carrying informed-date, alternative-recommended and recorded-confirmation reference."
+  vague_terms: []
+  sro_member_exemption: "As for 13.3(1)."
+
+- id: "13.3(3)"
+  heading: "Suitability - client exclusions"
+  division: "Division 1"
+  kind: scope
+  summary: "Section 13.3 does not apply if the client is a registered firm, a Canadian financial institution or a Schedule III bank."
+
+- id: "13.3(4)"
+  heading: "Suitability - dealer acting on adviser direction"
+  division: "Division 1"
+  kind: scope
+  summary: "Section 13.3 does not apply to a dealer trading for a client only as directed by a registered adviser acting for the client."
+
+- id: "13.3.1(1)"
+  heading: "Waivers - non-individual permitted client"
+  division: "Division 1"
+  kind: conditional_exemption
+  summary: "KYC-for-suitability, periodic review and suitability do not apply for a non-individual permitted client that has asked in writing that suitability determinations not be made."
+  applies_to: ["registrant"]
+  trigger: "registrant relies on the waiver"
+  required_action: "Hold a written client request; confirm client is a non-individual permitted client."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["CNS.C", "ACCT.O"]
+    field_extensions: ["ACCT.O PCL (permitted client Y/N)"]
+  check_sketch: "Where a suitability check is skipped on a waiver, require ACCT.O CT not IND, PCL:Y, and a CNS.C of type WAIVER."
+  vague_terms: []
+  sro_member_exemption: "Section 13.3.1 is listed in 9.3(1)(j.1), 9.3(2)(e.1), 9.4(1)(i.1) and 9.4(2)(c.1)."
+
+- id: "13.3.1(2)"
+  heading: "Waivers - individual permitted client"
+  division: "Division 1"
+  kind: conditional_exemption
+  summary: "The same relief applies for an individual permitted client that has asked in writing, but only if the account is not a managed account."
+  applies_to: ["registrant"]
+  trigger: "registrant relies on the waiver"
+  required_action: "Hold a written client request; confirm permitted client status and non-managed account."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["CNS.C", "ACCT.O"]
+    field_extensions: ["ACCT.O PCL, MGD"]
+  check_sketch: "Where a waiver is relied on for CT:IND, require PCL:Y, MGD:N and a CNS.C of type WAIVER."
+  vague_terms: []
+  sro_member_exemption: "As for 13.3.1(1)."
+
+# ======================================================================
+# Division 2 - Conflicts of interest
+# ======================================================================
+
+- id: "13.4(1)"
+  heading: "Conflicts of interest (firm) - identify"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered firm must take reasonable steps to identify existing and reasonably foreseeable material conflicts between the firm, or individuals acting for it, and the client."
+  applies_to: ["registered firm"]
+  trigger: "ongoing"
+  required_action: "Identify material conflicts."
+  deadline: null
+  category: judgment
+  fidcode_status: review_only
+  message_types:
+    existing: []
+    proposed: ["COI.R"]
+    field_extensions: []
+  check_sketch: "Machine can confirm a conflicts register exists and is updated (COI.R messages); whether all material conflicts were identified needs a person."
+  vague_terms: ["reasonable steps", "material", "reasonably foreseeable"]
+
+- id: "13.4(2)"
+  heading: "Conflicts of interest (firm) - address in client's best interest"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered firm must address every material conflict with a client in the client's best interest."
+  applies_to: ["registered firm"]
+  trigger: "a material conflict exists"
+  required_action: "Address the conflict in the client's best interest."
+  deadline: null
+  category: judgment
+  fidcode_status: review_only
+  message_types:
+    existing: []
+    proposed: ["COI.R"]
+    field_extensions: ["COI.R ACTN (control applied: AVOID, CTRL, DISC_ONLY)"]
+  check_sketch: "Machine can confirm each COI.R records a control and flag ACTN:DISC_ONLY (13.4(8) says disclosure alone is not enough); whether the control serves the client's best interest needs a person."
+  vague_terms: ["best interest", "material"]
+
+- id: "13.4(3)"
+  heading: "Conflicts of interest (firm) - avoid"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered firm must avoid any material conflict that is not, or cannot be, addressed in the client's best interest."
+  applies_to: ["registered firm"]
+  trigger: "a material conflict cannot be addressed in the client's best interest"
+  required_action: "Avoid the conflict."
+  deadline: null
+  category: judgment
+  fidcode_status: not_testable
+  message_types:
+    existing: []
+    proposed: []
+    field_extensions: []
+  check_sketch: "None. The obligation turns on whether a conflict can be addressed, which a message log cannot show."
+  vague_terms: ["best interest", "material"]
+
+- id: "13.4(4)"
+  heading: "Conflicts of interest (firm) - written disclosure"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered firm must disclose in writing identified material conflicts to affected clients where a reasonable client would expect to be told."
+  applies_to: ["registered firm"]
+  trigger: "a material conflict identified under 13.4(1) that a reasonable client would expect to be informed of"
+  required_action: "Deliver written disclosure to each affected client."
+  deadline: "see 13.4(7)"
+  category: mixed
+  testable_part: "Delivery of a DISC.D (type COI) to each account linked to a COI.R flagged for disclosure. Whether a reasonable client would expect disclosure is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["COI.R", "DISC.D"]
+    field_extensions: ["COI.R DSC (disclosure required Y/N)"]
+  check_sketch: "For every COI.R with DSC:Y, each affected account must have a DISC.D TYP:COI referencing it."
+  vague_terms: ["material", "reasonable client would expect"]
+
+- id: "13.4(5)"
+  heading: "Conflicts of interest (firm) - content of disclosure"
+  division: "Division 2"
+  kind: operative
+  summary: "Conflict disclosure must describe the nature and extent of the conflict, its potential impact and risk to the client, and how it is or will be addressed."
+  applies_to: ["registered firm"]
+  trigger: "disclosure under 13.4(4)"
+  required_action: "Include the three listed elements."
+  deadline: null
+  category: judgment
+  fidcode_status: review_only
+  message_types:
+    existing: []
+    proposed: ["DISC.D"]
+    field_extensions: ["DISC.D DOCREF (disclosure document id and version)"]
+  check_sketch: "Machine can confirm the disclosure document version delivered; a person must judge that it describes nature, impact and handling."
+  vague_terms: []
+
+- id: "13.4(6)"
+  heading: "Conflicts of interest (firm) - presentation"
+  division: "Division 2"
+  kind: operative
+  summary: "Conflict disclosure must be prominent, specific and in plain language, judged by a reasonable person."
+  applies_to: ["registered firm"]
+  trigger: "disclosure under 13.4(4)"
+  required_action: "Present disclosure prominently, specifically and in plain language."
+  deadline: null
+  category: judgment
+  fidcode_status: not_testable
+  message_types:
+    existing: []
+    proposed: []
+    field_extensions: []
+  check_sketch: "None from message logs; this is a quality standard for the document itself."
+  vague_terms: ["prominent", "specific", "plain language", "reasonable person"]
+
+- id: "13.4(7)"
+  heading: "Conflicts of interest (firm) - timing of disclosure"
+  division: "Division 2"
+  kind: operative
+  summary: "Conflict disclosure must be given before account opening if the conflict is already identified, or in a timely manner once a new, undisclosed conflict is identified."
+  applies_to: ["registered firm"]
+  trigger: "account opening; or identification of a new conflict requiring disclosure"
+  required_action: "Deliver the disclosure."
+  deadline: "(a) before opening an account for the client if the conflict has been identified at that time; (b) in a timely manner, upon identification"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["ACCT.O", "COI.R", "DISC.D"]
+    field_extensions: []
+  check_sketch: "(a) Each ACCT.O must be preceded by DISC.D TYP:COI covering all COI.R with DSC:Y dated before it; (b) each later COI.R with DSC:Y must be followed by DISC.D to affected clients within N days."
+  vague_terms: ["in a timely manner"]
+
+- id: "13.4(8)"
+  heading: "Conflicts of interest (firm) - disclosure alone insufficient"
+  division: "Division 2"
+  kind: interpretive
+  summary: "Disclosure alone does not satisfy the duty to address conflicts under 13.4(2) or 13.4.1(3)."
+
+- id: "13.4.1(1)"
+  heading: "Conflicts of interest (individual) - identify"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered individual must take reasonable steps to identify existing and reasonably foreseeable material conflicts between themselves and the client."
+  applies_to: ["registered individual"]
+  trigger: "ongoing"
+  required_action: "Identify material conflicts."
+  deadline: null
+  category: judgment
+  fidcode_status: review_only
+  message_types:
+    existing: []
+    proposed: ["COI.R"]
+    field_extensions: []
+  check_sketch: "Machine can count COI.R reports by individual (a zero count over a long period may warrant follow-up); completeness needs a person."
+  vague_terms: ["reasonable steps", "material", "reasonably foreseeable"]
+
+- id: "13.4.1(2)"
+  heading: "Conflicts of interest (individual) - report to firm"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered individual who identifies a material conflict must promptly report it to their sponsoring firm."
+  applies_to: ["registered individual"]
+  trigger: "the individual identifies a material conflict"
+  required_action: "Report the conflict to the sponsoring firm."
+  deadline: "promptly"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["COI.R"]
+    field_extensions: ["COI.R IDT (date identified) and RDT (date reported)"]
+  check_sketch: "For each COI.R raised by an individual, RDT minus IDT must be within N days."
+  vague_terms: ["promptly", "material"]
+  notes: "The identification date is self-reported, which limits what a log can prove."
+
+- id: "13.4.1(3)"
+  heading: "Conflicts of interest (individual) - address in client's best interest"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered individual must address all material conflicts with the client in the client's best interest."
+  applies_to: ["registered individual"]
+  trigger: "a material conflict exists"
+  required_action: "Address the conflict in the client's best interest."
+  deadline: null
+  category: judgment
+  fidcode_status: review_only
+  message_types:
+    existing: []
+    proposed: ["COI.R"]
+    field_extensions: []
+  check_sketch: "Machine can confirm a recorded control on each COI.R; adequacy needs a person."
+  vague_terms: ["best interest", "material"]
+
+- id: "13.4.1(4)"
+  heading: "Conflicts of interest (individual) - avoid"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered individual must avoid any material conflict that is not, or cannot be, addressed in the client's best interest."
+  applies_to: ["registered individual"]
+  trigger: "a material conflict cannot be addressed in the client's best interest"
+  required_action: "Avoid the conflict."
+  deadline: null
+  category: judgment
+  fidcode_status: not_testable
+  message_types:
+    existing: []
+    proposed: []
+    field_extensions: []
+  check_sketch: "None from message logs."
+  vague_terms: ["best interest", "material"]
+
+- id: "13.4.1(5)"
+  heading: "Conflicts of interest (individual) - no activity without firm consent"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered individual must not trade or advise in connection with a conflict they identified unless it has been addressed in the client's best interest and the sponsoring firm has consented."
+  applies_to: ["registered individual"]
+  trigger: "trading or advising activity connected with an identified material conflict"
+  required_action: "Obtain firm consent before the activity."
+  deadline: "before the activity (stated as a precondition)"
+  category: mixed
+  testable_part: "Firm consent (APR.F) dated before any ORD.* or REC.M tagged with the conflict reference. Linking activity to a conflict, and whether it was addressed in the client's best interest, are judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: ["ORD.B", "ORD.R", "ORD.X"]
+    proposed: ["COI.R", "APR.F", "REC.M"]
+    field_extensions: ["ORD.* COI (conflict reference)"]
+  check_sketch: "Any ORD.* or REC.M carrying a COI reference must be preceded by an APR.F TYP:COI for that conflict."
+  vague_terms: ["in connection with", "best interest"]
+
+- id: "13.4.2"
+  heading: "Investment fund managers"
+  division: "Division 2"
+  kind: scope
+  summary: "Sections 13.4 and 13.4.1 do not apply to an investment fund manager for a fund subject to NI 81-107."
+
+- id: "13.4.3(1)"
+  heading: "Position of influence - definition"
+  division: "Division 2"
+  kind: definition
+  summary: "Defines 'position of influence' as a non-firm position whose nature, training or knowledge would lead a reasonable person to see the holder as having influence over others."
+
+- id: "13.4.3(2)"
+  heading: "Position of influence - examples"
+  division: "Division 2"
+  kind: interpretive
+  summary: "Lists positions that are included for greater certainty: religious leaders, medical doctors, nurses, post-secondary teachers, lawyers and notaries."
+
+- id: "13.4.3(3)"
+  heading: "Position of influence - firm must not knowingly permit"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered firm must not knowingly let an individual in a position of influence trade or recommend securities or derivatives for someone susceptible to that influence through the position, or for that person's close family."
+  applies_to: ["registered firm"]
+  trigger: "a registered individual of the firm holds a position of influence"
+  required_action: "Prevent the individual from dealing with clients connected through the position, and their listed relatives."
+  deadline: null
+  category: mixed
+  testable_part: "If the firm logs positions of influence and flags connected clients, any ORD.* or REC.M by that individual for a flagged account is detectable. Identifying susceptible clients is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: ["ORD.B", "ORD.R", "ORD.X"]
+    proposed: ["POI.U", "REP.A", "REC.M"]
+    field_extensions: ["ORD.* REP (registered individual id)"]
+  check_sketch: "Block or flag any ORD.* or REC.M where the acting individual has a POI.U and the account is flagged as connected to that position."
+  vague_terms: ["knowingly", "reasonable person", "susceptible", "influence"]
+  notes: "ORD.* messages do not currently identify the acting individual; a REP field or REP.A history is needed."
+
+- id: "13.4.3(4)"
+  heading: "Position of influence - individual must not deal"
+  division: "Division 2"
+  kind: operative
+  summary: "An individual in a position of influence must not trade or recommend securities or derivatives for someone susceptible to them through the position, or for a relative of that person whom the individual knows of."
+  applies_to: ["registered individual"]
+  trigger: "the individual holds a position of influence"
+  required_action: "Do not deal with connected clients or their listed relatives."
+  deadline: null
+  category: mixed
+  testable_part: "Same as 13.4.3(3): detectable only for accounts flagged as connected."
+  fidcode_status: extendable
+  message_types:
+    existing: ["ORD.B", "ORD.R", "ORD.X"]
+    proposed: ["POI.U", "REC.M"]
+    field_extensions: ["ORD.* REP (registered individual id)"]
+  check_sketch: "Same check as 13.4.3(3), reported against the individual."
+  vague_terms: ["reasonable person", "susceptible", "knows"]
+
+- id: "13.5(1)"
+  heading: "Managed account transactions - 'responsible person'"
+  division: "Division 2"
+  kind: definition
+  summary: "Defines 'responsible person' for a registered adviser: the adviser, its partners, directors and officers, and employees, agents and affiliates with access to investment decisions or advice."
+
+- id: "13.5(2)(a)"
+  heading: "Managed account transactions - issuers connected to responsible persons"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered adviser must not knowingly cause a managed portfolio to buy securities of an issuer where a responsible person or associate is a partner, officer or director, unless this is disclosed and the client consents in writing before the purchase."
+  applies_to: ["registered adviser"]
+  trigger: "a purchase for a managed portfolio of a security of such an issuer"
+  required_action: "Disclose and obtain written client consent before the purchase."
+  deadline: "before the purchase"
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: ["ORD.B"]
+    proposed: ["RSP.U", "DISC.D", "CNS.C", "ACCT.O"]
+    field_extensions: []
+  check_sketch: "For ORD.B in MGD:Y accounts, if the issuer is on the RSP.U list, require prior DISC.D and CNS.C for that account and issuer."
+  vague_terms: ["knowingly"]
+  notes: "Applies to advisers (portfolio managers); relevant to dealers only where they also act as advisers."
+
+- id: "13.5(2)(b)"
+  heading: "Managed account transactions - trades with responsible persons"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered adviser must not knowingly cause a managed portfolio to buy from or sell to a responsible person, an associate, or a fund advised by a responsible person."
+  applies_to: ["registered adviser"]
+  trigger: "a managed-portfolio trade with such a counterparty"
+  required_action: "Do not execute."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: ["ORD.B", "ORD.R"]
+    proposed: ["RSP.U"]
+    field_extensions: ["ORD.* CPTY (counterparty id)"]
+  check_sketch: "Flag any managed-account ORD.* whose CPTY is on the RSP.U list."
+  vague_terms: ["knowingly"]
+
+- id: "13.5(2)(c)"
+  heading: "Managed account transactions - loans or guarantees to responsible persons"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered adviser must not knowingly cause a managed portfolio to lend to, or guarantee for, a responsible person or associate."
+  applies_to: ["registered adviser"]
+  trigger: "a loan or guarantee from a managed portfolio"
+  required_action: "Do not provide."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["RSP.U", "LND.X"]
+    field_extensions: []
+  check_sketch: "Flag any LND.X from a managed portfolio whose beneficiary is on the RSP.U list."
+  vague_terms: ["knowingly"]
+
+- id: "13.6"
+  heading: "Disclosure when recommending related or connected securities"
+  division: "Division 2"
+  kind: operative
+  summary: "A registered firm must not recommend buying, selling or holding its own securities, a related issuer's securities, or a connected issuer's securities in distribution unless it discloses the relationship in the same medium, or a fund-name similarity exception applies."
+  applies_to: ["registered firm"]
+  trigger: "a recommendation, in any medium, about such a security"
+  required_action: "Disclose the relationship in the same communication."
+  deadline: "in the same medium of communication"
+  category: mixed
+  testable_part: "If recommendations are logged with an issuer-relationship flag, the presence of same-communication disclosure is testable. Whether names are 'sufficiently similar' under (b) is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["REC.M", "DISC.D"]
+    field_extensions: ["REC.M REL (related/connected issuer Y/N), MED (medium)"]
+  check_sketch: "Each REC.M with REL:Y must carry a DISC.D TYP:RELISS with the same reference and medium, unless an exception flag is set and reviewed."
+  vague_terms: ["sufficiently similar", "nature and extent"]
+
+# ======================================================================
+# Division 3 - Referral arrangements
+# ======================================================================
+
+- id: "13.7"
+  heading: "Definitions - referral arrangements"
+  division: "Division 3"
+  kind: definition
+  summary: "Defines 'client' (includes prospective client), 'referral arrangement' and 'referral fee' (any benefit for a referral) for the Division."
+
+- id: "13.8(a)"
+  heading: "Permitted referral arrangements - written agreement"
+  division: "Division 3"
+  kind: operative
+  summary: "A firm or its registered individual must not participate in a referral arrangement unless its terms are in a written agreement between the firm and the other party before any client is referred."
+  applies_to: ["registered firm", "registered individual sponsored by the firm"]
+  trigger: "before a client is referred by or to the registrant"
+  required_action: "Put the arrangement in a written agreement."
+  deadline: "before a client is referred by or to the registrant"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["REF.A", "REF.X"]
+    field_extensions: []
+  check_sketch: "Each REF.X must reference a REF.A whose agreement date is on or before the referral date."
+  vague_terms: []
+
+- id: "13.8(b)"
+  heading: "Permitted referral arrangements - record all referral fees"
+  division: "Division 3"
+  kind: operative
+  summary: "The registered firm must record all referral fees."
+  applies_to: ["registered firm"]
+  trigger: "a referral fee is paid or received"
+  required_action: "Record the fee."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["REF.F"]
+    field_extensions: []
+  check_sketch: "Each REF.F must reference an existing REF.A; completeness can only be shown by reconciling REF.F totals to the general ledger."
+  vague_terms: []
+
+- id: "13.8(c)"
+  heading: "Permitted referral arrangements - disclosure before services"
+  division: "Division 3"
+  kind: operative
+  summary: "The registered firm must ensure the client receives the 13.10(1) written disclosure before the receiving party opens an account or provides services."
+  applies_to: ["registered firm"]
+  trigger: "a referred client is about to be onboarded or served"
+  required_action: "Deliver written referral disclosure."
+  deadline: "before the party receiving the referral either opens an account for the client or provides services to the client"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["REF.X", "DISC.D", "ACCT.O"]
+    field_extensions: []
+  check_sketch: "For each REF.X, a DISC.D TYP:REF to the client must precede the receiving party's ACCT.O or first service message."
+  vague_terms: []
+  notes: "When the firm refers out, the receiving party's account opening is outside the firm's log; the check then depends on the counterparty's messages."
+
+- id: "13.9"
+  heading: "Verifying the qualifications of the person or company receiving the referral"
+  division: "Division 3"
+  kind: operative
+  summary: "A firm or its individual must not refer a client out unless the firm first takes reasonable steps to confirm the recipient is qualified and, where applicable, registered for the services."
+  applies_to: ["registered firm", "registered individual sponsored by the firm"]
+  trigger: "before referring a client to another person or company"
+  required_action: "Verify qualifications and registration."
+  deadline: "first (before the referral)"
+  category: mixed
+  testable_part: "A verification date on REF.A before any outbound REF.X is testable; registration status could be matched to a registry feed. Adequacy of the qualification check is judgment."
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["REF.A", "REF.X"]
+    field_extensions: ["REF.A QVD (qualification verified date), REG (registration category of recipient)"]
+  check_sketch: "Each outbound REF.X must reference a REF.A with QVD on or before the referral date."
+  vague_terms: ["reasonable steps", "appropriate qualifications"]
+
+- id: "13.10(1)"
+  heading: "Disclosing referral arrangements to clients - content"
+  division: "Division 3"
+  kind: operative
+  summary: "The written referral disclosure must name the parties, describe the purpose and material terms, conflicts, the fee method and amount where possible, each registrant's category and permitted activities, a statement where referral is to a registrant, and anything else a reasonable client would find important."
+  applies_to: ["registered firm"]
+  trigger: "disclosure under 13.8(c)"
+  required_action: "Include the listed content."
+  deadline: null
+  category: mixed
+  testable_part: "Paragraphs (a), (d) and (e) map to structured fields that can be checked for presence. Paragraphs (b), (c) and (g) need a person."
+  fidcode_status: review_only
+  message_types:
+    existing: []
+    proposed: ["REF.A", "DISC.D"]
+    field_extensions: []
+  check_sketch: "Machine can confirm the disclosure version and that REF.A carries parties, fee method and registration categories; a person judges completeness."
+  vague_terms: ["material terms", "to the extent possible", "reasonable client would consider important"]
+
+- id: "13.10(2)"
+  heading: "Disclosing referral arrangements to clients - changes"
+  division: "Division 3"
+  kind: operative
+  summary: "If the disclosed information changes, the registrant must ensure each affected client gets written disclosure of the change as soon as possible and at least 30 days before the next referral fee is paid or received."
+  applies_to: ["registrant"]
+  trigger: "a change to the information disclosed under 13.10(1)"
+  required_action: "Deliver written change disclosure to each affected client."
+  deadline: "as soon as possible and no later than the 30th day before the date on which a referral fee is next paid or received"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["REF.A", "REF.F", "DISC.D"]
+    field_extensions: []
+  check_sketch: "After a REF.A change, each REF.F under that arrangement must be at least 30 days after a DISC.D TYP:REFCHG to every affected client; the 'as soon as possible' limb needs a parameter."
+  vague_terms: ["as soon as possible"]
+
+- id: "13.11"
+  heading: "[lapsed]"
+  division: "Division 3"
+  kind: repealed
+  summary: "Shown as [lapsed] in the body and [repealed] in the table of contents of the source."
+
+# ======================================================================
+# Division 4 - Borrowing and lending
+# ======================================================================
+
+- id: "13.12(1)"
+  heading: "Restriction on lending to clients"
+  division: "Division 4"
+  kind: operative
+  summary: "A registrant must not lend money, extend credit or provide margin to a client except in three cases: short-term IFM loans to its funds for redemptions or expenses; a firm lending to its own sponsored individuals, permitted individuals, directors, officers or employees; or an individual lending to a tax-related person with written firm approval."
+  applies_to: ["registrant"]
+  trigger: "a loan, credit extension or margin to a client"
+  required_action: "Only lend within a listed exception; individuals need written firm approval."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["LND.X", "APR.F"]
+    field_extensions: ["LND.X DIR (LEND/BORROW), REL (exception basis), APR (approval reference)"]
+  check_sketch: "Each LND.X with DIR:LEND must carry a valid exception basis; if made by an individual, REL must be a tax-related person and an APR.F TYP:LEND must precede it."
+  vague_terms: []
+  sro_member_exemption: "Section 13.12 is listed in 9.3(1)(k), 9.3(2)(f), 9.4(1)(j) and 9.4(2)(d) for CIRO member firms that comply with corresponding SRO provisions."
+  notes: "Detection depends on the loan being logged; undisclosed private lending would not appear."
+
+- id: "13.12(2)"
+  heading: "Restriction on borrowing from clients"
+  division: "Division 4"
+  kind: operative
+  summary: "A registered individual must not borrow money, securities or assets from a client, or accept a guarantee, unless the client is a lending financial institution acting in the normal course, or the client is tax-related and the firm has approved in writing."
+  applies_to: ["registered individual"]
+  trigger: "borrowing from, or accepting a guarantee from, a client"
+  required_action: "Only borrow within a listed exception; obtain written firm approval where required."
+  deadline: null
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["LND.X", "APR.F"]
+    field_extensions: []
+  check_sketch: "Each LND.X with DIR:BORROW must have either REL:FI or REL:TAXREL with a prior APR.F TYP:BORROW."
+  vague_terms: ["normal course"]
+  sro_member_exemption: "As for 13.12(1)."
+  notes: "Relies on self-reporting by the individual; a log can test reported cases, not find unreported ones."
+
+- id: "13.13(1)"
+  heading: "Disclosure when recommending the use of borrowed money"
+  division: "Division 4"
+  kind: operative
+  summary: "If a registrant recommends using borrowed money to buy a security, it must give the client a written leverage risk statement, substantially similar to the prescribed text, before the purchase."
+  applies_to: ["registrant"]
+  trigger: "a recommendation that the client use borrowed money to finance a purchase"
+  required_action: "Deliver the written leverage risk statement."
+  deadline: "before the purchase"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: ["ORD.B"]
+    proposed: ["REC.M", "DISC.D"]
+    field_extensions: ["REC.M LEV (borrowed money recommended Y/N)", "ORD.B LEV and REC (recommendation reference)"]
+  check_sketch: "For each ORD.B linked to a REC.M with LEV:Y, require a DISC.D TYP:LEV to the client on or before the order and no earlier than 180 days before it, unless the client is a permitted client."
+  vague_terms: ["substantially similar"]
+  sro_member_exemption: "Section 13.13 is listed in 3.16(1)(c), 3.16(2)(b), 9.3(1)(l), 9.3(2)(g), 9.4(1)(k) and 9.4(2)(e), conditional on SRO compliance."
+
+- id: "13.13(2)"
+  heading: "Disclosure when recommending the use of borrowed money - exceptions"
+  division: "Division 4"
+  kind: conditional_exemption
+  summary: "The statement is not required if it was given within the prior 180 days or the client is a permitted client; paragraph (b) is repealed."
+  applies_to: ["registrant"]
+  trigger: "a 13.13(1) recommendation"
+  required_action: "None if an exception applies."
+  deadline: "no earlier than the 180th day before the date of the proposed purchase"
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["DISC.D", "ACCT.O"]
+    field_extensions: ["ACCT.O PCL"]
+  check_sketch: "Built into the 13.13(1) check as a 180-day look-back and a permitted-client flag."
+  vague_terms: []
+  notes: "13.13(2)(b) is shown as [repealed] in the source."
+
+# ======================================================================
+# Division 5 - Complaints
+# ======================================================================
+
+- id: "13.14(1)"
+  heading: "Application of this Division - investment fund managers"
+  division: "Division 5"
+  kind: scope
+  summary: "Division 5 does not apply to an investment fund manager acting in that capacity."
+
+- id: "13.14(2)"
+  heading: "Application of this Division - Quebec"
+  division: "Division 5"
+  kind: scope
+  summary: "In Quebec, a firm complying with sections 168.1.1 to 168.1.3 of the Securities Act (Quebec) is deemed to comply with the Division."
+
+- id: "13.15"
+  heading: "Handling complaints"
+  division: "Division 5"
+  kind: operative
+  summary: "A registered firm must document every complaint about its products or services or a representative, and respond in a way a reasonable investor would consider fair and effective."
+  applies_to: ["registered firm"]
+  trigger: "receipt of a complaint about a product or service of the firm or a representative"
+  required_action: "Document the complaint; respond fairly and effectively."
+  deadline: null
+  category: mixed
+  testable_part: "That a CMP.R exists for each complaint and that a response is logged. Fairness and effectiveness are judgment."
+  fidcode_status: review_only
+  message_types:
+    existing: ["CMP.R"]
+    proposed: ["CMP.D"]
+    field_extensions: []
+  check_sketch: "Machine can confirm each CMP.R is followed by a CMP.D; the quality of the response needs a person."
+  vague_terms: ["reasonable investor", "fair and effective"]
+  sro_member_exemption: "Section 13.15 is listed in 9.3(1)(l.1), 9.3(2)(h), 9.4(1)(l) and 9.4(2)(f), conditional on SRO compliance."
+  notes: "compliance.py check C6 cites s.13.15, but the acknowledgement it tests is required by 13.16(2)."
+
+- id: "13.16(1)"
+  heading: "Dispute resolution service - definitions"
+  division: "Division 5"
+  kind: definition
+  summary: "For this section, a 'complaint' relates to trading or advising and is received within 6 years of when the client knew or ought to have known of the cause; 'OBSI' means the Ombudsman for Banking Services and Investments."
+
+- id: "13.16(2)"
+  heading: "Dispute resolution service - acknowledgement"
+  division: "Division 5"
+  kind: operative
+  summary: "On receiving a complaint, the firm must as soon as possible give the client a written acknowledgement describing the firm's obligations, the steps to reach independent dispute resolution, and the service's name and contact details."
+  applies_to: ["registered firm"]
+  trigger: "receipt of a complaint as defined in 13.16(1)"
+  required_action: "Send a written acknowledgement with the three listed items."
+  deadline: "as soon as possible"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: ["CMP.R"]
+    proposed: ["CMP.A"]
+    field_extensions: []
+  check_sketch: "Each CMP.R must be followed by a CMP.A within N business days. Existing C6 only checks that the planned ACK due date in CMP.R is within 5 business days of receipt; it does not show an acknowledgement was sent."
+  vague_terms: ["as soon as possible"]
+  notes: "The 5-business-day parameter in compliance.py does not appear in the NI text; its source (Companion Policy or SRO rule) should be confirmed."
+
+- id: "13.16(3)"
+  heading: "Dispute resolution service - decision notice"
+  division: "Division 5"
+  kind: operative
+  summary: "If the firm rejects a complaint or offers to resolve it, it must as soon as possible give the client written notice of the decision, with the acknowledgement information repeated."
+  applies_to: ["registered firm"]
+  trigger: "the firm decides to reject the complaint or make an offer"
+  required_action: "Send written notice of the decision with the 13.16(2) information."
+  deadline: "as soon as possible"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: ["CMP.R"]
+    proposed: ["CMP.D"]
+    field_extensions: ["CMP.D DDT (decision date) and NDT (notice sent date)"]
+  check_sketch: "For each CMP.D, NDT minus DDT must be within N days."
+  vague_terms: ["as soon as possible"]
+
+- id: "13.16(4)"
+  heading: "Dispute resolution service - making the service available"
+  division: "Division 5"
+  kind: operative
+  summary: "The firm must as soon as possible make independent dispute resolution available at its own expense if, after 90 days, it has not given a decision and the client has gone to the service, or the client goes to the service within 180 days of receiving the decision."
+  applies_to: ["registered firm"]
+  trigger: "(a) 90 days after receipt with no decision notice and client notifies the service; or (b) client notifies the service within 180 days of the decision notice"
+  required_action: "Make the service available at the firm's expense."
+  deadline: "as soon as possible; conditions use 'after 90 days of the firm's receipt' and 'within 180 days of the client's receipt'"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: ["CMP.R"]
+    proposed: ["CMP.D", "CMP.E"]
+    field_extensions: []
+  check_sketch: "Alert on any CMP.R with no CMP.D after 90 days; for each CMP.E meeting condition (a) or (b), require a firm response record within N days."
+  vague_terms: ["as soon as possible"]
+
+- id: "13.16(5)"
+  heading: "Dispute resolution service - claim limit condition"
+  division: "Division 5"
+  kind: conditional_exemption
+  summary: "Subsection (4) applies only if the client agrees to claim no more than $350,000 before the service."
+  applies_to: ["registered firm"]
+  trigger: "a client escalation under 13.16(4)"
+  required_action: "None beyond recording the client's agreement."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["CMP.E"]
+    field_extensions: ["CMP.E CAP (client agreed to $350,000 limit Y/N)"]
+  check_sketch: "Part of the 13.16(4) check: only CMP.E with CAP:Y create the obligation."
+  vague_terms: []
+
+- id: "13.16(6)"
+  heading: "Dispute resolution service - OBSI"
+  division: "Division 5"
+  kind: operative
+  summary: "Outside Quebec, the firm must take reasonable steps to ensure OBSI is the service made available."
+  applies_to: ["registered firm (not in Quebec, per 13.16(7))"]
+  trigger: "making a service available under 13.16(4)"
+  required_action: "Use OBSI."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["CMP.A"]
+    field_extensions: ["CMP.A SVC (service named)"]
+  check_sketch: "For accounts outside Quebec (ADDR.U PROV not QC), CMP.A SVC must be OBSI."
+  vague_terms: ["reasonable steps"]
+
+- id: "13.16(7)"
+  heading: "Dispute resolution service - Quebec"
+  division: "Division 5"
+  kind: scope
+  summary: "Subsection (6) does not apply in Quebec."
+
+- id: "13.16(8)"
+  heading: "Dispute resolution service - non-individual permitted clients"
+  division: "Division 5"
+  kind: scope
+  summary: "Section 13.16 does not apply to complaints by a permitted client that is not an individual."
+
+# ======================================================================
+# Division 6 - Registered sub-advisers
+# ======================================================================
+
+- id: "13.17(1)"
+  heading: "Exemption for registered sub-advisers - scope of exemption"
+  division: "Division 6"
+  kind: scope
+  summary: "A registered sub-adviser is exempt, for its sub-advisory activities, from Division 2 (except 13.5 and 13.6), Divisions 3 and 5, and listed Part 14 sections."
+
+- id: "13.17(2)"
+  heading: "Exemption for registered sub-advisers - conditions"
+  division: "Division 6"
+  kind: conditional_exemption
+  summary: "The exemption requires a written agreement setting out the sub-adviser's duties, and a written agreement by the principal adviser or dealer with its clients to be responsible for losses from the sub-adviser's failures."
+  applies_to: ["registered sub-adviser", "registered adviser or dealer that engages it"]
+  trigger: "reliance on the sub-adviser exemption"
+  required_action: "Hold the two written agreements."
+  deadline: null
+  category: judgment
+  fidcode_status: review_only
+  message_types:
+    existing: []
+    proposed: []
+    field_extensions: []
+  check_sketch: "Outside the dealer message flow; a contract register could show the agreements exist, and their terms need a person."
+  vague_terms: []
+
+# ======================================================================
+# Division 7 - Misleading communications
+# ======================================================================
+
+- id: "13.18(1)"
+  heading: "Misleading communications - holding out"
+  division: "Division 7"
+  kind: operative
+  summary: "Registered individuals and firms must not hold themselves out in a way that could reasonably be expected to mislead about proficiency, experience, qualifications or category, the nature of the relationship, or the products and services."
+  applies_to: ["registered individual", "registered firm"]
+  trigger: "ongoing; any communication"
+  required_action: "Do not mislead."
+  deadline: null
+  category: judgment
+  fidcode_status: not_testable
+  message_types:
+    existing: []
+    proposed: []
+    field_extensions: []
+  check_sketch: "None from transaction messages; would require review of marketing and client communications."
+  vague_terms: ["could reasonably be expected to deceive or mislead"]
+
+- id: "13.18(2)(a)"
+  heading: "Misleading communications - sales-based titles"
+  division: "Division 7"
+  kind: operative
+  summary: "A client-facing registered individual must not use a title, designation, award or recognition based in whole or part on their sales or revenue."
+  applies_to: ["registered individual who interacts with clients"]
+  trigger: "use of a title, designation, award or recognition"
+  required_action: "Do not use sales-based titles."
+  deadline: null
+  category: mixed
+  testable_part: "A title register can flag entries whose basis is recorded as sales or revenue. Whether a title is partly sales-based is judgment."
+  fidcode_status: review_only
+  message_types:
+    existing: []
+    proposed: ["TTL.U"]
+    field_extensions: ["TTL.U BAS (basis: SALES, CRED, APPT, OTH)"]
+  check_sketch: "Flag any TTL.U in use with BAS:SALES; a person confirms the basis of the rest."
+  vague_terms: ["based partly"]
+
+- id: "13.18(2)(b)"
+  heading: "Misleading communications - corporate officer titles"
+  division: "Division 7"
+  kind: operative
+  summary: "A client-facing registered individual must not use a corporate officer title unless the firm has appointed them to that office under corporate law."
+  applies_to: ["registered individual who interacts with clients"]
+  trigger: "use of a corporate officer title"
+  required_action: "Use only if formally appointed."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["TTL.U"]
+    field_extensions: ["TTL.U OFF (officer title Y/N) and APT (appointment reference)"]
+  check_sketch: "Each TTL.U with OFF:Y must carry an appointment reference."
+  vague_terms: []
+
+- id: "13.18(2)(c)"
+  heading: "Misleading communications - unapproved titles"
+  division: "Division 7"
+  kind: operative
+  summary: "A client-facing registered individual must not use a title or designation the sponsoring firm has not approved."
+  applies_to: ["registered individual who interacts with clients"]
+  trigger: "use of a title or designation"
+  required_action: "Use only firm-approved titles."
+  deadline: null
+  category: data
+  fidcode_status: extendable
+  message_types:
+    existing: []
+    proposed: ["TTL.U", "APR.F"]
+    field_extensions: []
+  check_sketch: "Each TTL.U in use must have an APR.F TYP:TITLE dated on or before first use."
+  vague_terms: []
+  notes: "Testing actual use (email signatures, business cards) is outside message logs."
+
+# ======================================================================
+# Division 8 - Temporary holds
+# ======================================================================
+
+- id: "13.19(1)"
+  heading: "Conditions for temporary hold - financial exploitation"
+  division: "Division 8"
+  kind: operative
+  summary: "A firm or its individual must not place a temporary hold for financial exploitation unless the firm reasonably believes the client is vulnerable and exploitation has occurred, is occurring, or has been or will be attempted."
+  applies_to: ["registered firm", "registered individual sponsored by the firm"]
+  trigger: "placing a temporary hold on the basis of financial exploitation"
+  required_action: "Hold only on a reasonable belief in both conditions."
+  deadline: null
+  category: judgment
+  fidcode_status: review_only
+  message_types:
+    existing: ["VC.H"]
+    proposed: []
+    field_extensions: ["VC.H DOCREF (reference to documented facts)"]
+  check_sketch: "Machine can confirm VC.H RSN:FX and a documented-facts reference; whether the belief was reasonable needs a person."
+  vague_terms: ["reasonably believes", "vulnerable client"]
+
+- id: "13.19(2)"
+  heading: "Conditions for temporary hold - mental capacity"
+  division: "Division 8"
+  kind: operative
+  summary: "A firm or its individual must not place a temporary hold for lack of mental capacity unless the firm reasonably believes the client cannot make financial decisions."
+  applies_to: ["registered firm", "registered individual sponsored by the firm"]
+  trigger: "placing a temporary hold on the basis of lack of mental capacity"
+  required_action: "Hold only on a reasonable belief."
+  deadline: null
+  category: judgment
+  fidcode_status: review_only
+  message_types:
+    existing: ["VC.H"]
+    proposed: []
+    field_extensions: ["VC.H DOCREF"]
+  check_sketch: "Machine can confirm VC.H RSN:DMC and a documented-facts reference; the belief needs a person."
+  vague_terms: ["reasonably believes"]
+
+- id: "13.19(3)(a)"
+  heading: "Temporary hold - document facts and reasons"
+  division: "Division 8"
+  kind: operative
+  summary: "The firm must document the facts and reasons for placing and, if applicable, continuing the hold."
+  applies_to: ["registered firm"]
+  trigger: "placing or continuing a temporary hold"
+  required_action: "Document facts and reasons."
+  deadline: null
+  category: mixed
+  testable_part: "Presence of a documentation reference on each VC.H and each continuation. Content is judgment."
+  fidcode_status: review_only
+  message_types:
+    existing: ["VC.H"]
+    proposed: ["VC.C"]
+    field_extensions: ["VC.H DOCREF"]
+  check_sketch: "Each VC.H and VC.C must carry a DOCREF; a person reviews the document."
+  vague_terms: []
+
+- id: "13.19(3)(b)"
+  heading: "Temporary hold - notice to client"
+  division: "Division 8"
+  kind: operative
+  summary: "The firm must give the client notice of the hold and the reasons as soon as possible after placing it."
+  applies_to: ["registered firm"]
+  trigger: "placing a temporary hold"
+  required_action: "Notify the client of the hold and reasons."
+  deadline: "as soon as possible after placing the temporary hold"
+  category: event
+  fidcode_status: covered
+  message_types:
+    existing: ["VC.H"]
+    proposed: []
+    field_extensions: []
+  check_sketch: "Existing C4: VC.H NTF (client notified on) must be within 1 day of the hold (1 day is a policy reading of 'as soon as possible'). NTF is a self-reported date, and the reasons in the notice are not checked."
+  vague_terms: ["as soon as possible"]
+
+- id: "13.19(3)(c)"
+  heading: "Temporary hold - review of facts"
+  division: "Division 8"
+  kind: operative
+  summary: "The firm must review the facts as soon as possible after placing the hold and on a reasonably frequent basis to decide whether to continue it."
+  applies_to: ["registered firm"]
+  trigger: "placing a temporary hold; ongoing while it lasts"
+  required_action: "Review the relevant facts."
+  deadline: "as soon as possible after placing the temporary hold, and on a reasonably frequent basis"
+  category: mixed
+  testable_part: "Scheduled review dates and review events are testable. Whether reviews were 'reasonably frequent' and substantive is judgment."
+  fidcode_status: covered
+  message_types:
+    existing: ["VC.H"]
+    proposed: ["VC.C"]
+    field_extensions: []
+  check_sketch: "Existing C4 requires VC.H REVW (next review date) within 30 days. This checks a planned date only; logging completed reviews would need VC.C or a review message."
+  vague_terms: ["as soon as possible", "reasonably frequent"]
+
+- id: "13.19(3)(d)"
+  heading: "Temporary hold - 30-day revoke or continue"
+  division: "Division 8"
+  kind: operative
+  summary: "Within 30 days of placing the hold, and within every following 30-day period until revoked, the firm must either revoke the hold or notify the client of its decision to continue and the reasons."
+  applies_to: ["registered firm"]
+  trigger: "placing a temporary hold; each subsequent 30-day period"
+  required_action: "Revoke, or give the client notice of continuation with reasons."
+  deadline: "within 30 days of placing the temporary hold and, until the hold is revoked, within every subsequent 30-day period"
+  category: event
+  fidcode_status: extendable
+  message_types:
+    existing: ["VC.H"]
+    proposed: ["VC.X", "VC.C"]
+    field_extensions: []
+  check_sketch: "For each VC.H, walk forward in 30-day windows: each window must contain a VC.X (revoked) or a VC.C (continued, client notified), until a VC.X appears."
+  vague_terms: []
+  notes: "Bright line. Existing C4 checks only that the next review date is within 30 days; it cannot see revocation or continuation notices."

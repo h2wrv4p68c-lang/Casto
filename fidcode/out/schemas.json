@@ -218,7 +218,7 @@
     ],
     "additionalProperties": false,
     "x-rules": [
-      "NI 31-103 s.13.2(2)(e)",
+      "NI 31-103 s.13.2.01",
       "NI 31-103 s.13.19"
     ]
   },
@@ -495,7 +495,7 @@
     ],
     "additionalProperties": false,
     "x-rules": [
-      "NI 31-103 s.13.3(2)"
+      "NI 31-103 s.13.3(1)"
     ]
   },
   "SUIT.R": {
@@ -660,7 +660,7 @@
     "additionalProperties": false,
     "x-rules": [
       "NI 31-103 s.13.15",
-      "NI 31-103 s.13.16"
+      "NI 31-103 s.13.16(2)"
     ]
   },
   "ADDR.U": {

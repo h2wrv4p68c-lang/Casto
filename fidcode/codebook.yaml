@@ -60,7 +60,7 @@ types:
       PH:  {name: phone, type: text}
       CON: {name: client consent to contact, type: enum, enum: yes_no, required: true}
       EF:  {name: effective date, type: date, required: true}
-    rules: ["NI 31-103 s.13.2(2)(e)", "NI 31-103 s.13.19"]
+    rules: ["NI 31-103 s.13.2.01", "NI 31-103 s.13.19"]
 
   ORD.B:
     name: purchase order
@@ -105,7 +105,7 @@ types:
       ACT:  {name: account type, type: enum, enum: acct_type, required: true}
       KIND: {name: transfer form, type: enum, enum: kind, required: true}
       AMT:  {name: estimated value (CAD), type: number}
-    rules: ["NI 31-103 s.13.3(2)"]
+    rules: ["NI 31-103 s.13.3(1)"]
 
   SUIT.R:
     name: suitability review
@@ -134,7 +134,7 @@ types:
       CAT: {name: category, type: enum, enum: complaint, required: true}
       RCV: {name: date received, type: date, required: true}
       ACK: {name: acknowledgement due, type: date, required: true}
-    rules: ["NI 31-103 s.13.15", "NI 31-103 s.13.16"]
+    rules: ["NI 31-103 s.13.15", "NI 31-103 s.13.16(2)"]
 
   ADDR.U:
     name: address change
